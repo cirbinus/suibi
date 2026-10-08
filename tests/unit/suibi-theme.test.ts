@@ -125,15 +125,27 @@ describe('typecho-theme-suibi', () => {
     expect(css).toContain('.suibi-stream-item__hit {');
     expect(css).toContain('inset: 0;');
     expect(css).toContain('a:not(.suibi-stream-item__hit)');
-    // Hover paints the clickable region so the affordance is visible.
-    expect(css).toContain('.suibi-stream-item:hover { background: var(--suibi-hover); }');
+    // Hover paints the clickable region, and the band spans the whole container
+    // (same -gutter/+gutter trick as the reference warm theme) so it reads as
+    // one full-width row rather than a partial stripe.
+    expect(css).toContain('.suibi-stream-item:hover {');
+    expect(css).toContain('background: var(--suibi-hover);');
+    expect(css).toMatch(/\.suibi-stream-item \{[^}]*margin-inline: calc\(-1 \* var\(--suibi-gutter\)\);[^}]*padding: var\(--suibi-gutter\);/);
+    // No separator rules between entries: whitespace + hover carry the rhythm.
+    expect(css).not.toContain('.suibi-stream-item + .suibi-stream-item');
   });
 
   it('uses a compact, borderless, responsive reading layout', () => {
     const css = read('style.css');
     expect(css).toContain('--suibi-page-width: 780px;');
     expect(css).toContain('--suibi-reading-width: 720px;');
-    expect(css).toContain('--suibi-accent: #244564;');
+    // Warm neutral palette, aligned with the reference warm theme: no cool blue cast.
+    expect(css).toContain('--suibi-accent: #685f57;');
+    expect(css).toContain('--suibi-text: #242321;');
+    expect(css).toContain('--suibi-border: #ebe8e3;');
+    expect(css).not.toContain('#244564');
+    expect(css).not.toContain('#e5e8e8');
+    expect(css).not.toContain('#242c33');
     expect(css).toContain('@media (max-width: 640px)');
     expect(css).not.toContain('box-shadow:');
     expect(css).toContain('prefers-reduced-motion');

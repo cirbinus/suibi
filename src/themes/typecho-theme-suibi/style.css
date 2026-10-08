@@ -1,14 +1,16 @@
-/* Suibi: a quiet, unified Chinese essay stream on warm-white paper. */
+/* Suibi: a quiet, unified Chinese essay stream on warm-white paper.
+   Palette deliberately mirrors the reference warm theme (biji.io): warm neutral
+   greys, no cool blue cast, warm-brown accent. */
 :root {
-  --suibi-bg: #fffdf9;
+  --suibi-bg: #fff;
   --suibi-surface: #f7f6f3;
   --suibi-surface-strong: #f2f0ec;
-  --suibi-text: #242c33;
-  --suibi-body: #3e4851;
-  --suibi-muted: #68747e;
+  --suibi-text: #242321;
+  --suibi-body: #3d3a37;
+  --suibi-muted: #6f6c68;
   --suibi-faint: #a09c96;
-  --suibi-border: #e5e8e8;
-  --suibi-accent: #244564;
+  --suibi-border: #ebe8e3;
+  --suibi-accent: #685f57;
   --suibi-hover: #faf9f7;
   --suibi-font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --suibi-serif: "Noto Serif SC", "Songti SC", "Source Han Serif SC", STSong, SimSun, serif;
@@ -261,15 +263,7 @@ body.suibi-theme {
   color: var(--suibi-accent);
 }
 
-/* Separators track the text column, not the full-bleed hover hit box. */
-.suibi-stream-item + .suibi-stream-item::before {
-  content: "";
-  position: absolute;
-  inset-inline: var(--suibi-gutter);
-  top: 0;
-  height: 1px;
-  background: var(--suibi-border);
-}
+/* 条目之间不画分隔线：与参考站一致，靠留白区分（hover 底色承担可点提示）。 */
 
 .suibi-sr-only {
   position: absolute;
@@ -514,7 +508,7 @@ body.suibi-theme {
 }
 
 .suibi-note__media-name {
-  color: var(--suibi-fg-muted, #8a96a8);
+  color: var(--suibi-faint);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -553,7 +547,7 @@ body.suibi-theme {
   padding: 3px 6px;
   border-radius: 0;
   background: var(--suibi-surface);
-  color: var(--suibi-accent, #8a96a8);
+  color: var(--suibi-accent);
   font-size: 11px;
   font-weight: 700;
   text-align: center;
@@ -1670,14 +1664,7 @@ body.suibi-theme {
 }
 .suibi-stream-heading h1 { margin: 0; font-size: 1.15rem; color: var(--suibi-accent); }
 .suibi-stream-heading p { margin: 4px 0 0; color: var(--suibi-muted); font-size: .82rem; }
-.suibi-stream-item {
-  margin-inline: -12px;
-  padding: 24px 12px;
-}
-/* 整块可点，用底色变化提示可点击范围（与 biji.io 一致）。 */
-.suibi-stream-item:hover { background: var(--suibi-hover); }
-/* 分隔线只出现在条目之间，且与正文列对齐（不留结尾线）。 */
-.suibi-stream-item + .suibi-stream-item::before { inset-inline: 12px; }
+/* 整块可点 + 整条通栏的 hover 底色（与参考站一致），不再额外改内边距。 */
 .suibi-live-refresh {
   position: sticky;
   z-index: 10;
