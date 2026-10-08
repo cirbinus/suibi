@@ -7,7 +7,7 @@ import type { ThemePostProps } from '@/lib/theme-props';
 import SuibiShell from './SuibiShell.astro';
 import SuibiComments from './SuibiComments.astro';
 import SuibiToc from './SuibiToc.astro';
-import { formatSuibiDate, plainExcerpt, prepareArticleToc, readingMinutes, suibiArticleSummary, suibiSettings } from './suibi';
+import { formatSuibiDate, plainExcerpt, prepareArticleToc, readingMinutes, suibiArticleSummary, suibiPostKind, suibiSettings } from './suibi';
 
 type Props = ThemePostProps;
 const { options, urls, pages, sidebarData, currentPath, pluginCtx, post, categories, tags, commentPagination } = Astro.props;
@@ -17,9 +17,20 @@ const optimizedContent = optimizeContentImages(post.content, settings.imageOptim
 const toc = prepareArticleToc(optimizedContent);
 const engineSummary = pluginCtx.activatedPlugins.has('typecho-plugin-engine') ? await readSummary(db, post.cid) : null;
 const summary = suibiArticleSummary(post, engineSummary);
-const description = summary || (!(post.hasPassword && !post.passwordVerified) ? plainExcerpt(post.content, 160) : '');
+const isProtected = post.hasPassword && !post.passwordVerified;
+const description = summary || (!isProtected ? plainExcerpt(post.content, 160) : '');
+
+/*
+ * 随笔是碎片，可以没有标题。核心层会把空标题兜底成「无标题」，直接渲染出来
+ * 很丑；参考站的做法是根本不输出标题。标签页改用正文首句，否则「随笔 - 随笔」
+ * 会和站名重复。
+ */
+const headline = (post.title || '').trim();
+const untitled = headline === '' || headline === '无标题';
+const isEssay = untitled || suibiPostKind(post, settings) === 'essay';
+const pageTitle = isEssay ? (description || '').slice(0, 40).trim() || undefined : headline;
 ---
-<SuibiShell title={post.title} description={description} options={options} urls={urls} pages={pages} sidebarData={sidebarData} currentPath={currentPath} pageContext={{ hasComments: post.allowComment, pageType: 'post' }} pluginCtx={pluginCtx} section="archive" detail>
+<SuibiShell title={pageTitle} description={description} options={options} urls={urls} pages={pages} sidebarData={sidebarData} currentPath={currentPath} pageContext={{ hasComments: post.allowComment, pageType: 'post' }} pluginCtx={pluginCtx} section="archive" detail>
   <article class:list={["suibi-article", { "has-toc": toc.items.length > 0 }]} itemscope itemtype="https://schema.org/BlogPosting">
     <header class="suibi-article__header">
       <div class="suibi-item-meta">
@@ -28,7 +39,7 @@ const description = summary || (!(post.hasPassword && !post.passwordVerified) ? 
         <time datetime={new Date(post.created * 1000).toISOString()} itemprop="datePublished">{formatSuibiDate(post.created, options.postDateFormat, options.timezone)}</time>
         <span aria-hidden="true">·</span><span>约 {readingMinutes(post.content)} 分钟阅读</span>
       </div>
-      <h1 itemprop="headline">{post.title}</h1>
+      {!isEssay && <h1 itemprop="headline">{headline}</h1>}
       {summary && <p class="suibi-article__summary">{summary}</p>}
     </header>
     <div class:list={["suibi-article__body", { "suibi-article__body--toc": toc.items.length > 0 }]}>

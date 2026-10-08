@@ -79,11 +79,11 @@ const refererValue = safeAdminRedirectUrl(refererAbsolute, urls.siteUrl || Astro
       <form action="/api/users/login" method="post" name="login" id="login-form" role="form">
         <p>
           <label for="name" class="sr-only">用户名或邮箱</label>
-          <input type="text" id="name" name="name" placeholder="用户名或邮箱" class="text-l w-100" autofocus required />
+          <input type="text" id="name" name="name" placeholder="用户名或邮箱" class="text-l w-100" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" autofocus required />
         </p>
         <p>
           <label for="password" class="sr-only">密码</label>
-          <input type="password" id="password" name="password" placeholder="密码" class="text-l w-100" required />
+          <input type="password" id="password" name="password" placeholder="密码" class="text-l w-100" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" required />
         </p>
         {loginFormHtml && <Fragment set:html={loginFormHtml} />}
         <p class="submit">

@@ -78,6 +78,19 @@ describe('typecho-theme-suibi', () => {
     expect(note).toContain('plainExcerpt');
   });
 
+  it('never renders the placeholder title "无标题" on an essay page', () => {
+    const post = read('components/Post.astro');
+
+    // Core substitutes an empty title with 无标题, so detect that placeholder.
+    expect(post).toContain("headline === '无标题'");
+    // Essays drop the heading entirely (reference-site behaviour) …
+    expect(post).toContain('{!isEssay && <h1');
+    // … and the tab title falls back to the body's first sentence, so the
+    // label never duplicates the site name as "随笔 - 随笔".
+    expect(post).toContain('const pageTitle = isEssay');
+    expect(post).not.toContain("isEssay ? '随笔'");
+  });
+
   it('maps categories to kinds in one place', () => {
     const shared = read('components/suibi.ts');
     expect(shared).toContain('export function suibiPostKind');
