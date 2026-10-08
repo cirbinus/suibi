@@ -219,7 +219,7 @@ body.suibi-theme {
   position: relative;
   min-width: 0;
   margin-inline: calc(-1 * var(--suibi-gutter));
-  padding: var(--suibi-gutter);
+  padding: 18px var(--suibi-gutter);
   transition: background-color 180ms ease;
 }
 
@@ -1701,7 +1701,7 @@ body.suibi-theme {
   .suibi-main { margin-top: 36px; }
   /* 同上：手机端让首页顶部与条目间距完全一致。 */
   .suibi-main--home { margin-top: 20px; }
-  .suibi-stream-item { padding-block: 20px; }
+  .suibi-stream-item { padding-block: 16px; }
   .suibi-item-title { font-size: 1.2rem; }
   .suibi-stream-item--essay .suibi-item-body { font-size: 15px; }
 }

@@ -143,7 +143,7 @@ describe('typecho-theme-suibi', () => {
     // one full-width row rather than a partial stripe.
     expect(css).toContain('.suibi-stream-item:hover {');
     expect(css).toContain('background: var(--suibi-hover);');
-    expect(css).toMatch(/\.suibi-stream-item \{[^}]*margin-inline: calc\(-1 \* var\(--suibi-gutter\)\);[^}]*padding: var\(--suibi-gutter\);/);
+    expect(css).toMatch(/\.suibi-stream-item \{[^}]*margin-inline: calc\(-1 \* var\(--suibi-gutter\)\);[^}]*padding: 18px var\(--suibi-gutter\);/);
     // No separator rules between entries: whitespace + hover carry the rhythm.
     expect(css).not.toContain('.suibi-stream-item + .suibi-stream-item');
   });
@@ -172,10 +172,10 @@ describe('typecho-theme-suibi', () => {
     expect(headerBlocks.some(block => block.includes('border'))).toBe(false);
     expect(headerBlocks.some(block => block.includes('padding-bottom'))).toBe(false);
 
-    // Even vertical rhythm: the gap above the first entry equals the entry
-    // padding, so the header→content gap is the same as entry→entry.
-    expect(css).toContain('.suibi-main--home { margin-top: 20px; }');
-    expect(css).toContain('.suibi-stream-item { padding-block: 20px; }');
+    // Keep the feed compact: 16px per side on mobile (32px between cards),
+    // 18px per side on desktop (36px between cards).
+    expect(css).toContain('.suibi-stream-item { padding-block: 16px; }');
+    expect(css).toContain('padding: 18px var(--suibi-gutter);');
     // Touch devices must not keep a stuck hover band after a tap.
     expect(css).toContain('@media (hover: hover) and (pointer: fine)');
   });
