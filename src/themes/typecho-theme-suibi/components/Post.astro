@@ -1,0 +1,41 @@
+---
+import { env } from 'cloudflare:workers';
+import { getDb } from 'typecho/db';
+import { readSummary } from 'typecho-plugin-engine';
+import { optimizeContentImages } from '@/lib/image-transform';
+import type { ThemePostProps } from '@/lib/theme-props';
+import SuibiShell from './SuibiShell.astro';
+import SuibiComments from './SuibiComments.astro';
+import SuibiToc from './SuibiToc.astro';
+import { formatSuibiDate, plainExcerpt, prepareArticleToc, readingMinutes, suibiArticleSummary, suibiSettings } from './suibi';
+
+type Props = ThemePostProps;
+const { options, urls, pages, sidebarData, currentPath, pluginCtx, post, categories, tags, commentPagination } = Astro.props;
+const settings = suibiSettings(options);
+const db = getDb(env.DB);
+const optimizedContent = optimizeContentImages(post.content, settings.imageOptimizeParams, urls.siteUrl);
+const toc = prepareArticleToc(optimizedContent);
+const engineSummary = pluginCtx.activatedPlugins.has('typecho-plugin-engine') ? await readSummary(db, post.cid) : null;
+const summary = suibiArticleSummary(post, engineSummary);
+const description = summary || (!(post.hasPassword && !post.passwordVerified) ? plainExcerpt(post.content, 160) : '');
+---
+<SuibiShell title={post.title} description={description} options={options} urls={urls} pages={pages} sidebarData={sidebarData} currentPath={currentPath} pageContext={{ hasComments: post.allowComment, pageType: 'post' }} pluginCtx={pluginCtx} section="archive" detail>
+  <article class:list={["suibi-article", { "has-toc": toc.items.length > 0 }]} itemscope itemtype="https://schema.org/BlogPosting">
+    <header class="suibi-article__header">
+      <div class="suibi-item-meta">
+        {categories[0] ? <a href={categories[0].permalink}>{categories[0].name}</a> : <span>随笔</span>}
+        <span aria-hidden="true">·</span>
+        <time datetime={new Date(post.created * 1000).toISOString()} itemprop="datePublished">{formatSuibiDate(post.created, options.postDateFormat, options.timezone)}</time>
+        <span aria-hidden="true">·</span><span>约 {readingMinutes(post.content)} 分钟阅读</span>
+      </div>
+      <h1 itemprop="headline">{post.title}</h1>
+      {summary && <p class="suibi-article__summary">{summary}</p>}
+    </header>
+    <div class:list={["suibi-article__body", { "suibi-article__body--toc": toc.items.length > 0 }]}>
+      <div class="suibi-prose" view-image itemprop="articleBody" set:html={toc.html} />
+      {toc.items.length > 0 && <SuibiToc items={toc.items} />}
+    </div>
+    {tags.length > 0 && <footer class="suibi-article__footer">{tags.map(tag => <a href={tag.permalink}>#{tag.name}</a>)}</footer>}
+  </article>
+  {(post.allowComment || commentPagination.totalComments > 0) && <SuibiComments cid={post.cid} componentLoadMode={settings.commentComponentLoadMode} initialLoadMode={settings.commentInitialLoadMode} cooldownSeconds={options.commentsPostIntervalEnable ? (options.commentsPostInterval || 60) : 0} />}
+</SuibiShell>

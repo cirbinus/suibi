@@ -1,0 +1,45 @@
+---
+import type { CommentNode, CommentOptions } from '@/lib/theme-props';
+import { formatSuibiDate } from './suibi';
+
+interface Props {
+  comments: CommentNode[];
+  commentOptions: CommentOptions;
+  gravatarMap: Record<number, string>;
+  depth?: number;
+}
+
+const { comments, commentOptions, gravatarMap, depth = 0 } = Astro.props;
+---
+{comments.map(comment => (
+  <article class="suibi-comment" id={`comment-${comment.coid}`} data-comment-id={comment.coid} style={`--comment-depth:${Math.min(depth, 3)}`}>
+    <div class="suibi-comment__header">
+      <div class="suibi-comment__identity">
+        {commentOptions.showAvatar && gravatarMap[comment.coid] ? (
+          <img src={gravatarMap[comment.coid]} width="36" height="36" alt="" loading="lazy" />
+        ) : (
+          <span class="suibi-comment__avatar" aria-hidden="true">{comment.author.slice(0, 1).toUpperCase()}</span>
+        )}
+        <div>
+          {comment.url && commentOptions.showUrl ? (
+            <a href={comment.url} rel={commentOptions.urlNofollow ? 'external nofollow' : 'external'}>{comment.author}</a>
+          ) : <strong>{comment.author}</strong>}
+          <time datetime={new Date(comment.created * 1000).toISOString()}>{formatSuibiDate(comment.created, commentOptions.dateFormat, commentOptions.timezone)}</time>
+        </div>
+      </div>
+      {commentOptions.allowComment && <button type="button" class="suibi-comment__reply" data-reply-to={comment.coid} data-reply-author={comment.author}>回复</button>}
+    </div>
+    {comment.status !== 'approved' && <p class="suibi-comment__status">评论待审核，仅你可见</p>}
+    <div class="suibi-comment__content suibi-prose" set:html={comment.text} />
+    {comment.children.length > 0 && (
+      <div class="suibi-comment__children">
+        <Astro.self
+          comments={comment.children}
+          commentOptions={commentOptions}
+          gravatarMap={gravatarMap}
+          depth={depth + 1}
+        />
+      </div>
+    )}
+  </article>
+))}

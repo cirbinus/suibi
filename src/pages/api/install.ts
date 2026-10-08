@@ -195,7 +195,7 @@ export const POST: APIRoute = async ({ request }) => {
     const secret = generateRandomString(32);
 
     const defaultOptions: Record<string, string> = {
-      theme: 'typecho-theme-warm',
+      theme: 'typecho-theme-suibi',
       timezone: '28800',
       lang: 'zh_CN',
       charset: 'UTF-8',

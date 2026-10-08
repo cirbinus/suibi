@@ -1,0 +1,101 @@
+---
+import type { SuibiContinuousLoadMode } from './suibi';
+interface Props {
+  hasPrev: boolean;
+  hasNext: boolean;
+  prevUrl: string | null;
+  nextUrl: string | null;
+  mode: SuibiContinuousLoadMode;
+  label: string;
+}
+const { hasPrev, hasNext, prevUrl, nextUrl, mode, label } = Astro.props;
+---
+<nav class="suibi-pagination suibi-pagination--progressive" aria-label={label} data-suibi-stream-pagination data-suibi-load-mode={mode} data-suibi-next-url={hasNext ? nextUrl || undefined : undefined}>
+  {hasPrev && prevUrl && <a href={prevUrl} rel="prev">上一页</a>}
+  {hasNext && nextUrl ? <a href={nextUrl} rel="next" data-suibi-load-more data-no-instant>加载更多</a> : <a data-suibi-load-more data-no-instant aria-disabled="true">已加载全部内容</a>}
+  {hasNext && <span data-suibi-load-sentinel aria-hidden="true"></span>}
+</nav>
+<script is:inline>
+  (() => {
+    const autoLimit = mode => mode === 'auto-2' ? 2 : mode === 'infinite' ? Infinity : 0;
+    const initialise = pagination => {
+      if (pagination.dataset.suibiBound === 'true') return;
+      pagination.dataset.suibiBound = 'true';
+      const stream = pagination.parentElement?.querySelector('[data-suibi-stream]');
+      const link = pagination.querySelector('[data-suibi-load-more]');
+      const sentinel = pagination.querySelector('[data-suibi-load-sentinel]');
+      const limit = autoLimit(pagination.dataset.suibiLoadMode || 'manual');
+      let automaticLoads = 0;
+      let loading = false;
+      let observer = null;
+      let userHasScrolled = false;
+      if (!stream || !link) return;
+
+      const sync = () => {
+        const nextUrl = pagination.dataset.suibiNextUrl;
+        link.textContent = loading ? '正在加载…' : nextUrl ? '加载更多' : '已加载全部内容';
+        if (nextUrl) {
+          link.href = nextUrl;
+          link.removeAttribute('aria-disabled');
+        } else {
+          link.removeAttribute('href');
+          link.setAttribute('aria-disabled', 'true');
+          observer?.disconnect();
+          sentinel?.remove();
+        }
+      };
+      const canAutoLoad = () => userHasScrolled && automaticLoads < limit && !!pagination.dataset.suibiNextUrl;
+      const loadNext = async automatic => {
+        const nextUrl = pagination.dataset.suibiNextUrl;
+        if (!nextUrl || loading || (automatic && !canAutoLoad())) return;
+        loading = true;
+        observer?.disconnect();
+        sync();
+        try {
+          const response = await fetch(nextUrl, { credentials: 'same-origin', headers: { Accept: 'text/html' } });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const document = new DOMParser().parseFromString(await response.text(), 'text/html');
+          const nextStream = document.querySelector('[data-suibi-stream]');
+          const nextPagination = document.querySelector('[data-suibi-stream-pagination]');
+          const items = nextStream ? Array.from(nextStream.children).filter(item => item.matches('.suibi-stream-item')) : [];
+          if (!items.length) throw new Error('下一页没有可加载的内容');
+          stream.append(...items);
+          pagination.dataset.suibiNextUrl = nextPagination?.getAttribute('data-suibi-next-url') || '';
+          if (automatic) automaticLoads += 1;
+        } catch (error) {
+          link.textContent = '加载失败，请重试';
+          console.error('[suibi] failed to load the next page', error);
+        } finally {
+          loading = false;
+          sync();
+          setupObserver();
+        }
+      };
+      const setupObserver = () => {
+        observer?.disconnect();
+        observer = null;
+        if (!canAutoLoad() || !sentinel || !('IntersectionObserver' in window)) return;
+        observer = new IntersectionObserver(entries => {
+          if (entries.some(entry => entry.isIntersecting)) void loadNext(true);
+        }, { rootMargin: '0px 0px -20% 0px' });
+        observer.observe(sentinel);
+      };
+      const onScroll = () => {
+        userHasScrolled = true;
+        window.removeEventListener('scroll', onScroll);
+        setupObserver();
+      };
+      const cleanup = () => {
+        if (pagination.isConnected) return;
+        observer?.disconnect();
+        window.removeEventListener('scroll', onScroll);
+        window.removeEventListener('instantclick:newpage', cleanup);
+      };
+      link.addEventListener('click', event => { event.preventDefault(); void loadNext(false); });
+      if (limit > 0) window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('instantclick:newpage', cleanup);
+      sync();
+    };
+    document.querySelectorAll('[data-suibi-stream-pagination]').forEach(initialise);
+  })();
+</script>

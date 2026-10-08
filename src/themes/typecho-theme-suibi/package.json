@@ -1,0 +1,10 @@
+{
+  "name": "typecho-theme-suibi",
+  "version": "1.0.0",
+  "description": "A minimalist unified Chinese essay theme for Typecho-Workers.",
+  "author": "Typecho-Workers contributors",
+  "homepage": "https://github.com/Tokinx/typecho-workers/tree/master/src/themes/typecho-theme-suibi",
+  "license": "MIT",
+  "keywords": ["typecho", "theme", "suibi", "minimal"],
+  "files": ["theme.json", "style.css", "components/"]
+}

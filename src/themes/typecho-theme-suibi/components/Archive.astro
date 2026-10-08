@@ -1,0 +1,23 @@
+---
+import type { ThemeArchiveProps } from '@/lib/theme-props';
+import SuibiShell from './SuibiShell.astro';
+import SuibiStreamPagination from './SuibiStreamPagination.astro';
+import { formatSuibiDate, plainExcerpt, suibiSettings } from './suibi';
+
+type Props = ThemeArchiveProps;
+const { options, urls, pages, sidebarData, currentPath, pluginCtx, archiveTitle, posts, pagination } = Astro.props;
+const settings = suibiSettings(options);
+---
+<SuibiShell title={archiveTitle} options={options} urls={urls} pages={pages} sidebarData={sidebarData} currentPath={currentPath} pluginCtx={pluginCtx} section="archive">
+  <header class="suibi-stream-heading"><h1>{archiveTitle}</h1></header>
+  <div class="suibi-stream" data-suibi-stream>
+    {posts.length ? posts.map(post => (
+      <article class="suibi-stream-item" data-suibi-cid={post.cid}>
+        <div class="suibi-item-meta"><time datetime={new Date(post.created * 1000).toISOString()}>{formatSuibiDate(post.created, options.postDateFormat, options.timezone)}</time>{post.categories[0] && <><span aria-hidden="true">·</span><a href={post.categories[0].permalink}>{post.categories[0].name}</a></>}</div>
+        <h2><a href={post.permalink}>{post.title}</a></h2>
+        {post.excerpt && <p>{plainExcerpt(post.excerpt)}</p>}
+      </article>
+    )) : <section class="suibi-empty"><h2>没有找到内容</h2><p>换个分类或关键词再看看。</p></section>}
+  </div>
+  <SuibiStreamPagination hasPrev={pagination.hasPrev} hasNext={pagination.hasNext} prevUrl={pagination.prevUrl} nextUrl={pagination.nextUrl} mode={settings.continuousLoadMode} label="归档分页" />
+</SuibiShell>

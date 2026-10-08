@@ -317,6 +317,9 @@ bun run db:migrate:wordpress -- \
 
 MIT
 
+默认的「随笔」主题以本项目原有的 `typecho-theme-warm` 为工程基础重新设计，
+保留评论、目录、图片查看和渐进加载能力；两者均按 MIT 许可证发布。
+
 ---
 
 ## 开发指南

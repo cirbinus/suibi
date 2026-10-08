@@ -1,0 +1,120 @@
+---
+import Base from '@/layouts/Base.astro';
+import type { ThemeBaseProps } from '@/lib/theme-props';
+import type { PageContext } from '@/lib/plugin';
+import { PUBLIC_HTML_HEADER } from '@/lib/cache';
+import { suibiSettings, type SuibiSection } from './suibi';
+import { instantClickSource } from './instantclick';
+import { viewImageSource } from './viewimage';
+
+interface Props extends Omit<ThemeBaseProps, 'user' | 'isLoggedIn'> {
+  title?: string;
+  description?: string;
+  section?: SuibiSection;
+  pageContext?: PageContext;
+  detail?: boolean;
+  liveRefresh?: boolean;
+}
+
+const {
+  title, description, section = 'none', detail = false, liveRefresh = false,
+  options, urls, pages, sidebarData, pluginCtx, pageContext, currentPath,
+} = Astro.props;
+Astro.response.headers.set(PUBLIC_HTML_HEADER, '1');
+const settings = suibiSettings(options);
+const categories = sidebarData.categories.slice(0, 10);
+const homeUrl = `${urls.siteUrl.replace(/\/$/, '')}/`;
+const socialLinks = [
+  { label: 'RSS', href: urls.feedUrl },
+  { label: 'GitHub', href: settings.githubUrl },
+  { label: '社交主页', href: settings.socialUrl },
+  { label: 'Email', href: settings.email ? `mailto:${settings.email}` : '' },
+].filter(link => link.href);
+---
+<Base title={title} description={description} options={options} urls={urls} pageContext={pageContext} pluginCtx={pluginCtx} bodyClass="suibi-theme">
+  <a class="suibi-skip-link" href="#suibi-content" data-no-instant>跳至正文</a>
+  <header class="suibi-header">
+    <div class="suibi-header__inner">
+      <a href={homeUrl} class="suibi-brand" aria-label={`${options.title} 首页`}>
+        <span class="suibi-brand__title">{options.title}</span>
+        {options.description && <span class="suibi-brand__description">{options.description}</span>}
+      </a>
+      <nav class="suibi-nav" aria-label="主导航">
+        <a class:list={["suibi-nav__link", { "is-active": section === 'home' }]} href={homeUrl} aria-current={section === 'home' ? 'page' : undefined}>首页</a>
+        <details class:list={["suibi-nav__dropdown", { "is-active": section === 'archive' }]}>
+          <summary>归档 <span aria-hidden="true">⌄</span></summary>
+          <div class="suibi-nav__menu">
+            <a href={homeUrl}>全部随笔</a>
+            {categories.map(category => <a href={category.permalink}>{category.name}</a>)}
+          </div>
+        </details>
+        {pages.map(page => <a class:list={["suibi-nav__link", { "is-active": currentPath !== '/' && page.permalink.includes(currentPath) }]} href={page.permalink}>{page.title}</a>)}
+      </nav>
+    </div>
+  </header>
+
+  {liveRefresh && <aside class="suibi-live-refresh" data-suibi-live-refresh hidden><a href={homeUrl}>有新随笔，点击查看</a></aside>}
+  <main id="suibi-content" class:list={["suibi-main", { "suibi-main--detail": detail }]} tabindex="-1"><slot /></main>
+
+  <footer class="suibi-footer">
+    <div><span>© {new Date().getFullYear()} {options.title}</span><nav aria-label="页脚链接">{socialLinks.map(link => <a href={link.href}>{link.label}</a>)}</nav></div>
+  </footer>
+
+  <Fragment slot="head">
+    <meta name="theme-color" content="#fffdf9" />
+    <script is:inline data-instant-track data-no-instant set:html={instantClickSource}></script>
+    <script is:inline data-instant-track data-no-instant set:html={viewImageSource}></script>
+  </Fragment>
+
+  <script is:inline data-no-instant>
+    (() => {
+      document.addEventListener('click', event => {
+        document.querySelectorAll('.suibi-nav__dropdown[open]').forEach(dropdown => {
+          if (!dropdown.contains(event.target)) dropdown.open = false;
+        });
+      });
+      const viewImageSelector = CSS.supports('selector(a:has(> img))')
+        ? '[view-image] a:has(> img), [view-image] img:not(a img)'
+        : '[view-image] img';
+      if (window.ViewImage) ViewImage.init(viewImageSelector);
+      if (window.InstantClick?.supported) InstantClick.init('mousedown');
+    })();
+  </script>
+
+  {liveRefresh && <script is:inline>
+    (() => {
+      const banner = document.querySelector('[data-suibi-live-refresh]');
+      const stream = document.querySelector('[data-suibi-stream]');
+      if (!banner || !stream) return;
+      const firstCid = stream.querySelector('[data-suibi-cid]')?.getAttribute('data-suibi-cid') || '';
+      let polling = false;
+      const poll = async () => {
+        if (polling || document.hidden || !banner.isConnected) return;
+        polling = true;
+        try {
+          const url = new URL(window.location.href);
+          if (url.origin !== window.location.origin) return;
+          const response = await fetch(url.href, {
+            credentials: 'same-origin',
+            headers: { Accept: 'text/html', 'Cache-Control': 'no-cache' },
+          });
+          if (!response.ok) return;
+          const nextDocument = new DOMParser().parseFromString(await response.text(), 'text/html');
+          const nextCid = nextDocument.querySelector('[data-suibi-stream] [data-suibi-cid]')?.getAttribute('data-suibi-cid') || '';
+          if (firstCid && nextCid && nextCid !== firstCid) banner.hidden = false;
+        } catch (error) {
+          console.debug('[suibi] fresh-content check failed', error);
+        } finally {
+          polling = false;
+        }
+      };
+      const interval = window.setInterval(poll, Math.max(60_000, 60_000));
+      const cleanup = () => {
+        if (banner.isConnected) return;
+        window.clearInterval(interval);
+        window.removeEventListener('instantclick:newpage', cleanup);
+      };
+      window.addEventListener('instantclick:newpage', cleanup);
+    })();
+  </script>}
+</Base>

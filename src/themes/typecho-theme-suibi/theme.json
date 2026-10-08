@@ -1,0 +1,38 @@
+{
+  "id": "typecho-theme-suibi",
+  "name": "随笔",
+  "description": "克制、紧凑的中文随笔主题，所有内容统一为文章。",
+  "author": "Typecho-Workers contributors",
+  "version": "1.0.0",
+  "stylesheet": "style.css",
+  "homepage": "https://github.com/Tokinx/typecho-workers/tree/master/src/themes/typecho-theme-suibi",
+  "license": "MIT",
+  "commentsMode": "api",
+  "publicHtml": true,
+  "tags": ["minimal", "essay", "single-column"],
+  "config": {
+    "githubUrl": { "type": "text", "label": "GitHub 地址", "default": "" },
+    "socialUrl": { "type": "text", "label": "社交主页地址", "default": "" },
+    "email": { "type": "text", "label": "联系邮箱", "default": "" },
+    "imageOptimizeParams": {
+      "type": "text", "label": "图片优化参数",
+      "description": "追加到站内正文图片 URL，例如：?quality=80", "default": ""
+    },
+    "thumbOptimizeParams": {
+      "type": "text", "label": "缩略图优化参数",
+      "description": "保留兼容配置；为空时沿用正文图片参数。", "default": ""
+    },
+    "continuousLoadMode": {
+      "type": "select", "label": "随笔列表加载方式", "default": "infinite",
+      "options": { "manual": "手动加载", "auto-2": "滚动加载 2 次", "infinite": "无限滚动加载" }
+    },
+    "commentComponentLoadMode": {
+      "type": "select", "label": "评论组件", "default": "manual",
+      "options": { "manual": "手动加载", "dwell": "停留 3 秒加载", "auto": "自动加载" }
+    },
+    "commentInitialLoadMode": {
+      "type": "select", "label": "评论列表", "default": "manual",
+      "options": { "manual": "手动加载", "auto-first": "加载第一页", "auto-2": "滚动加载 2 次", "infinite": "无限滚动加载" }
+    }
+  }
+}

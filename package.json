@@ -50,6 +50,7 @@
     "typecho-plugin-notifier": "workspace:*",
     "typecho-plugin-engine": "workspace:*",
     "typecho-plugin-turnstile": "workspace:*",
+    "typecho-theme-suibi": "workspace:*",
     "typecho-theme-warm": "workspace:*"
   },
   "devDependencies": {

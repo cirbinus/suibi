@@ -1,0 +1,39 @@
+name = "suibi-preview"
+main = "@astrojs/cloudflare/entrypoints/server"
+compatibility_date = "2026-04-21"
+compatibility_flags = [ "nodejs_compat" ]
+
+[vars]
+PBKDF2_ITERATIONS = "50000"
+
+[cache]
+enabled = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "suibi-preview"
+database_id = "00000000-0000-0000-0000-000000000001"
+migrations_dir = "drizzle"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "suibi-preview-uploads"
+
+[[kv_namespaces]]
+binding = "TYPECHO_CACHE"
+id = "00000000000000000000000000000001"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+persist = true
+
+[observability.traces]
+enabled = false
+persist = true
