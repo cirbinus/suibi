@@ -1,0 +1,535 @@
+/**
+ * Unit tests for src/lib/markdown.ts
+ *
+ * Key concern: <!--more--> must NOT be split on before rendering.
+ * The full markdown source (both sides of the marker) must be parsed in
+ * a single pass so that reference-style links, footnotes, and other
+ * constructs that span the boundary are resolved correctly.
+ */
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
+import { addHook, type HookContext } from '@/lib/plugin';
+import { autop, escapeHtml, generateExcerpt, renderCommentText, renderContentExcerpt, renderMarkdown, renderMarkdownFiltered, resetMarkdownRenderCache, stripHtmlTags, stripTypechoMarkers, transformGithubAlerts } from '@/lib/markdown';
+import { notifyEarlyRequestInvalidation } from '@/lib/early-request';
+import { marked } from 'marked';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const HyperDown = require('../../public/vendor/hyperdown.js') as new () => {
+  enableHtml: (v: boolean) => void;
+  enableLine: (v: boolean) => void;
+  makeHtml: (src: string) => string;
+};
+
+// ---------------------------------------------------------------------------
+// renderMarkdown
+// ---------------------------------------------------------------------------
+
+describe('renderMarkdown', () => {
+  it('renders basic markdown to HTML', () => {
+    expect(renderMarkdown('**bold**')).toContain('<strong>bold</strong>');
+  });
+
+  it('strips <!--markdown--> prefix', () => {
+    const html = renderMarkdown('<!--markdown-->*em*');
+    expect(html).toContain('<em>em</em>');
+    expect(html).not.toContain('<!--markdown-->');
+  });
+
+  it('removes <!--more--> from output', () => {
+    const html = renderMarkdown('before<!--more-->after');
+    expect(html).not.toContain('more');
+    expect(html).toContain('before');
+    expect(html).toContain('after');
+  });
+
+  it('resolves reference-style links defined after <!--more-->', () => {
+    // The link definition [foo]: ... sits after <!--more-->.
+    // renderMarkdown must render the whole document, so [link][foo] should resolve.
+    const src = 'See [link][foo]<!--more-->\n\n[foo]: https://example.com';
+    const html = renderMarkdown(src);
+    expect(html).toContain('href="https://example.com"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GitHub-style alerts (`> [!NOTE]`)
+// ---------------------------------------------------------------------------
+
+describe('transformGithubAlerts / GFM alerts', () => {
+  const alertSource = (type: string, body: string) => `> [!${type}]\n> ${body}`;
+
+  it.each([
+    ['NOTE', 'note'],
+    ['TIP', 'tip'],
+    ['WARNING', 'warning'],
+  ] as const)('renders [!%s] with colored border class', (type, cls) => {
+    const html = renderMarkdown(alertSource(type, '补充说明'));
+    expect(html).toContain(`class="markdown-alert markdown-alert-${cls}"`);
+    expect(html).toContain(`data-alert="${type}"`);
+    expect(html).toContain(`class="markdown-alert-title">${type}</p>`);
+    expect(html).toContain('补充说明');
+    expect(html).toContain('<blockquote');
+    expect(html).not.toContain(`[!${type}]`);
+  });
+
+  it('shows arbitrary [!label] text as the title without a color class', () => {
+    const html = renderMarkdown('> [!重要]\n> 请务必注意');
+    expect(html).toContain('class="markdown-alert"');
+    expect(html).not.toContain('markdown-alert-note');
+    expect(html).toContain('class="markdown-alert-title">重要</p>');
+    expect(html).toContain('请务必注意');
+    expect(html).not.toContain('[!重要]');
+  });
+
+  it('escapes HTML in the extracted label', () => {
+    const html = renderMarkdown('> [!<script>x</script>]\n> body');
+    expect(html).toContain('class="markdown-alert-title">&lt;script&gt;x&lt;/script&gt;</p>');
+    expect(html).not.toContain('<script>x</script>');
+  });
+
+  it('leaves ordinary blockquotes alone', () => {
+    const html = renderMarkdown('> just a quote');
+    expect(html).toContain('<blockquote');
+    expect(html).not.toContain('markdown-alert');
+  });
+
+  it('preserves inline markdown inside alerts', () => {
+    const html = renderMarkdown('> [!TIP]\n> use **bold** and [link](https://example.com)');
+    expect(html).toContain('<strong>bold</strong>');
+    expect(html).toContain('href="https://example.com"');
+    expect(html).toContain('markdown-alert-tip');
+  });
+
+  it('transforms HyperDown preview HTML the same way', () => {
+    const hd = new HyperDown();
+    hd.enableHtml(true);
+    hd.enableLine(true);
+    const raw = hd.makeHtml(alertSource('WARNING', '请三思'));
+    expect(raw).toContain('<blockquote');
+    const html = transformGithubAlerts(raw);
+    expect(html).toContain('markdown-alert-warning');
+    expect(html).toContain('class="markdown-alert-title">WARNING</p>');
+    expect(html).toContain('请三思');
+    expect(html).not.toContain('[!WARNING]');
+  });
+
+  it('splits HyperDown-merged consecutive quotes into separate alerts', () => {
+    const hd = new HyperDown();
+    hd.enableHtml(true);
+    hd.enableLine(true);
+    const md = [
+      '> 普通引用',
+      '',
+      '> [!AAA]',
+      '> 自定义',
+      '',
+      '> [!NOTE]',
+      '> 提示',
+      '',
+      '> [!TIP]',
+      '> 技巧',
+    ].join('\n');
+    const raw = hd.makeHtml(md);
+    // HyperDown merges consecutive quotes into one blockquote.
+    expect(raw.match(/<blockquote/gi)?.length ?? 0).toBe(1);
+    const html = transformGithubAlerts(raw);
+    expect(html).toContain('<blockquote><p>普通引用</p></blockquote>');
+    expect(html).toContain('data-alert="AAA"');
+    expect(html).toContain('class="markdown-alert-title">AAA</p>');
+    expect(html).toContain('markdown-alert-note');
+    expect(html).toContain('markdown-alert-tip');
+    expect(html).not.toContain('[!NOTE]');
+    expect(html).not.toContain('[!TIP]');
+    expect(html).not.toContain('[!AAA]');
+  });
+
+  it('keeps alerts across <!--more--> excerpt splits', () => {
+    const html = renderContentExcerpt(
+      '> [!NOTE]\n> intro<!--more-->\n\nafter',
+      'more',
+      '/p/',
+    );
+    expect(html).toContain('markdown-alert-note');
+    expect(html).toContain('intro');
+    expect(html).not.toContain('after');
+  });
+});
+
+describe('renderMarkdownFiltered failure isolation', () => {
+  it('falls back to sanitized source when content:markdown fails', async () => {
+    const pluginId = 'audit-markdown-throws';
+    addHook('content:markdown', pluginId, () => { throw new Error('plugin failure'); });
+    const ctx: HookContext = { activatedPlugins: new Set([pluginId]) };
+    const html = await renderMarkdownFiltered(ctx, '**safe**\n\n<script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('<strong>safe</strong>');
+  });
+
+  it('keeps sanitized HTML when content:content fails', async () => {
+    const pluginId = 'audit-content-throws';
+    addHook('content:content', pluginId, () => { throw new Error('plugin failure'); });
+    const ctx: HookContext = { activatedPlugins: new Set([pluginId]) };
+    const html = await renderMarkdownFiltered(ctx, '**safe**\n\n<script>alert(1)</script>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('<strong>safe</strong>');
+  });
+});
+
+describe('renderMarkdownFiltered memoization', () => {
+  beforeEach(() => {
+    resetMarkdownRenderCache();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('reuses the memoized render for identical source and plugin set', async () => {
+    const parseSpy = vi.spyOn(marked, 'parse');
+    const ctx: HookContext = { activatedPlugins: new Set() };
+    const first = await renderMarkdownFiltered(ctx, '**memo** text');
+    const callsAfterFirst = parseSpy.mock.calls.length;
+    const second = await renderMarkdownFiltered(ctx, '**memo** text');
+    expect(second).toBe(first);
+    expect(parseSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it('re-renders when the activated plugin set differs', async () => {
+    let filterCalls = 0;
+    const pluginId = 'memo-marker-plugin';
+    addHook('content:markdown', pluginId, (value: string) => {
+      filterCalls += 1;
+      return `${value} memo marker`;
+    });
+    const anonymous: HookContext = { activatedPlugins: new Set() };
+    const withPlugin: HookContext = { activatedPlugins: new Set([pluginId]) };
+
+    const plain = await renderMarkdownFiltered(anonymous, 'memo source text');
+    expect(filterCalls).toBe(0);
+
+    const transformed = await renderMarkdownFiltered(withPlugin, 'memo source text');
+    expect(filterCalls).toBe(1);
+    expect(transformed).not.toBe(plain);
+
+    // Same plugin set again → cache hit, the filter does not re-run.
+    await renderMarkdownFiltered(withPlugin, 'memo source text');
+    expect(filterCalls).toBe(1);
+  });
+
+  it('re-renders after resetMarkdownRenderCache', async () => {
+    const parseSpy = vi.spyOn(marked, 'parse');
+    const ctx: HookContext = { activatedPlugins: new Set() };
+    await renderMarkdownFiltered(ctx, '**reset me**');
+    const callsAfterFirst = parseSpy.mock.calls.length;
+    resetMarkdownRenderCache();
+    await renderMarkdownFiltered(ctx, '**reset me**');
+    expect(parseSpy.mock.calls.length).toBe(callsAfterFirst + 1);
+  });
+
+  it('re-renders when an invalidation covers the content domain', async () => {
+    const parseSpy = vi.spyOn(marked, 'parse');
+    const ctx: HookContext = { activatedPlugins: new Set() };
+    await renderMarkdownFiltered(ctx, '**invalidatable**');
+    const callsAfterFirst = parseSpy.mock.calls.length;
+    await notifyEarlyRequestInvalidation({ reason: 'options', domains: [], sharedDomains: ['all'] });
+    await renderMarkdownFiltered(ctx, '**invalidatable**');
+    expect(parseSpy.mock.calls.length).toBe(callsAfterFirst + 1);
+  });
+
+  it('skips unrelated invalidations', async () => {
+    const parseSpy = vi.spyOn(marked, 'parse');
+    const ctx: HookContext = { activatedPlugins: new Set() };
+    await renderMarkdownFiltered(ctx, '**unrelated**');
+    const callsAfterFirst = parseSpy.mock.calls.length;
+    await notifyEarlyRequestInvalidation({ reason: 'comment', domains: [], sharedDomains: ['comments'] });
+    await renderMarkdownFiltered(ctx, '**unrelated**');
+    expect(parseSpy.mock.calls.length).toBe(callsAfterFirst);
+  });
+
+  it('does not memoize oversized sources', async () => {
+    const parseSpy = vi.spyOn(marked, 'parse');
+    const ctx: HookContext = { activatedPlugins: new Set() };
+    const huge = 'x'.repeat(100_001);
+    await renderMarkdownFiltered(ctx, huge);
+    const callsAfterFirst = parseSpy.mock.calls.length;
+    await renderMarkdownFiltered(ctx, huge);
+    expect(parseSpy.mock.calls.length).toBe(callsAfterFirst + 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renderContentExcerpt
+// ---------------------------------------------------------------------------
+
+describe('renderContentExcerpt', () => {
+  it('returns full rendered HTML when no <!--more--> present', () => {
+    const html = renderContentExcerpt('hello **world**');
+    expect(html).toContain('<strong>world</strong>');
+    expect(html).not.toContain('more');
+  });
+
+  it('truncates at <!--more--> and appends read-more link', () => {
+    const html = renderContentExcerpt('intro<!--more-->rest', '继续阅读', '/post/1/');
+    expect(html).toContain('intro');
+    expect(html).not.toContain('rest');
+    expect(html).toContain('继续阅读');
+    expect(html).toContain('href="/post/1/"');
+  });
+
+  it('resolves reference-style links defined AFTER <!--more-->', () => {
+    // Critical regression test: link def is on the "rest" side of <!--more-->.
+    // The excerpt must still render [click][ref] as a proper anchor.
+    const src = '[click][ref]<!--more-->\n\n[ref]: https://example.org "Example"';
+    const html = renderContentExcerpt(src, 'more', '/p/');
+    expect(html).toContain('href="https://example.org"');
+    expect(html).toContain('click');
+    // The link definition raw text should not appear as visible content
+    expect(html).not.toContain('[ref]:');
+  });
+
+  it('resolves reference-style links defined BEFORE <!--more-->', () => {
+    const src = '[ref]: https://example.net\n\nbefore [click][ref]<!--more-->after';
+    const html = renderContentExcerpt(src, 'more', '/p/');
+    expect(html).toContain('href="https://example.net"');
+    expect(html).not.toContain('after');
+  });
+
+  it('handles multiple <!--more--> markers (only first split matters)', () => {
+    const html = renderContentExcerpt('a<!--more-->b<!--more-->c', 'more', '/p/');
+    expect(html).toContain('>a<');
+    expect(html).not.toContain('>b<');
+    expect(html).not.toContain('>c<');
+  });
+
+  it('strips <!--markdown--> prefix', () => {
+    const html = renderContentExcerpt('<!--markdown-->**bold**<!--more-->rest');
+    expect(html).toContain('<strong>bold</strong>');
+    expect(html).not.toContain('<!--markdown-->');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// generateExcerpt
+// ---------------------------------------------------------------------------
+
+describe('generateExcerpt', () => {
+  it('returns plain text without tags', () => {
+    const text = generateExcerpt('**hello** world');
+    expect(text).not.toContain('<');
+    expect(text).toContain('hello');
+  });
+
+  it('truncates at maxLength', () => {
+    const long = 'a'.repeat(300);
+    const text = generateExcerpt(long, 100);
+    expect(text.length).toBeLessThanOrEqual(103); // 100 + '...'
+    expect(text.endsWith('...')).toBe(true);
+  });
+
+  it('does not include <!--more--> marker text in output', () => {
+    const text = generateExcerpt('hello<!--more-->world');
+    expect(text).not.toContain('more');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// XSS prevention in renderContentExcerpt (security fix)
+// ---------------------------------------------------------------------------
+describe('renderContentExcerpt XSS prevention', () => {
+  it('escapes double quotes in permalink attribute', () => {
+    const html = renderContentExcerpt(
+      'intro<!--more-->rest',
+      '阅读更多',
+      '/post/" onmouseover="alert(1)',
+    );
+    // The double quotes should be escaped as &quot; preventing attribute breakout
+    expect(html).toContain('&quot;');
+    // The href value should be safely escaped, not creating a real onmouseover attribute
+    expect(html).not.toMatch(/onmouseover="alert/);
+    // The escaped version is safe: it's inside the href attribute value
+    expect(html).toContain('href="/post/&quot; onmouseover=&quot;alert(1)"');
+  });
+
+  it('escapes HTML tags in moreText', () => {
+    const html = renderContentExcerpt(
+      'intro<!--more-->rest',
+      '<script>alert("xss")</script>',
+      '/post/1/',
+    );
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('escapes & in permalink', () => {
+    const html = renderContentExcerpt(
+      'intro<!--more-->rest',
+      'more',
+      '/post?a=1&b=2',
+    );
+    expect(html).toContain('&amp;');
+  });
+
+  it('normal permalink and moreText render correctly', () => {
+    const html = renderContentExcerpt(
+      'intro<!--more-->rest',
+      '继续阅读',
+      '/archives/1/',
+    );
+    expect(html).toContain('href="/archives/1/"');
+    expect(html).toContain('继续阅读');
+    expect(html).toContain('class="more"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// iframe sanitization (domain restriction fix)
+// ---------------------------------------------------------------------------
+describe('renderMarkdown iframe filtering', () => {
+  it('allows YouTube iframes', () => {
+    const md = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>';
+    const html = renderMarkdown(md);
+    expect(html).toContain('iframe');
+    expect(html).toContain('youtube.com');
+  });
+
+  it('allows Bilibili iframes', () => {
+    const md = '<iframe src="https://player.bilibili.com/player.html?bvid=BV1xx411c7mD"></iframe>';
+    const html = renderMarkdown(md);
+    expect(html).toContain('iframe');
+    expect(html).toContain('bilibili.com');
+  });
+
+  it('strips iframes from untrusted domains', () => {
+    const md = '<iframe src="https://evil.com/steal"></iframe>';
+    const html = renderMarkdown(md);
+    // sanitize-html strips the src attribute from untrusted domains
+    expect(html).not.toContain('evil.com');
+    expect(html).not.toContain('src=');
+  });
+
+  it('strips iframes with javascript: URLs', () => {
+    const md = '<iframe src="javascript:alert(1)"></iframe>';
+    const html = renderMarkdown(md);
+    expect(html).not.toContain('javascript:');
+  });
+});
+
+describe('renderCommentText', () => {
+  it('escapes HTML when no comment tags are allowed', () => {
+    const html = renderCommentText('<strong>bold</strong><script>alert(1)</script>');
+    expect(html).not.toContain('<strong>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('bold');
+  });
+
+  it('allows configured comment tags and attributes', () => {
+    const html = renderCommentText('<a href="https://example.com">site</a>', {
+      htmlTagAllowed: '<a href="">',
+    });
+    expect(html).toContain('<a href="https://example.com">site</a>');
+  });
+
+  it('honors comment markdown setting', () => {
+    const plain = renderCommentText('**bold**', { markdown: false });
+    const markdown = renderCommentText('**bold**', { markdown: true });
+    expect(plain).not.toContain('<strong>');
+    expect(markdown).toContain('<strong>bold</strong>');
+  });
+
+  it('renders GFM alerts when comment markdown is enabled', () => {
+    const html = renderCommentText('> [!NOTE]\n> 评论提示', { markdown: true });
+    expect(html).toContain('markdown-alert-note');
+    expect(html).toContain('class="markdown-alert-title">NOTE</p>');
+    expect(html).toContain('评论提示');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// escapeHtml
+// ---------------------------------------------------------------------------
+
+describe('escapeHtml', () => {
+  it('escapes all five HTML special characters', () => {
+    expect(escapeHtml('&<>"\'')).toBe('&amp;&lt;&gt;&quot;&#39;');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(escapeHtml('')).toBe('');
+  });
+
+  it('does not double-escape already escaped text', () => {
+    const once = escapeHtml('<b>');
+    expect(escapeHtml(once)).toBe('&amp;lt;b&amp;gt;');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stripTypechoMarkers
+// ---------------------------------------------------------------------------
+
+describe('stripTypechoMarkers', () => {
+  it('removes <!--markdown--> prefix', () => {
+    expect(stripTypechoMarkers('<!--markdown-->content')).toBe('content');
+  });
+
+  it('removes <!--more--> tags anywhere', () => {
+    expect(stripTypechoMarkers('before<!--more-->after')).toBe('beforeafter');
+    expect(stripTypechoMarkers('<!--more-->start')).toBe('start');
+    expect(stripTypechoMarkers('end<!--more-->')).toBe('end');
+  });
+
+  it('leaves plain text unchanged', () => {
+    expect(stripTypechoMarkers('plain text')).toBe('plain text');
+  });
+
+  it('removes both markers together', () => {
+    expect(stripTypechoMarkers('<!--markdown-->intro<!--more-->rest')).toBe('introrest');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// stripHtmlTags
+// ---------------------------------------------------------------------------
+
+describe('stripHtmlTags', () => {
+  it('removes all HTML tags and collapses whitespace', () => {
+    expect(stripHtmlTags('<p>hello <b>world</b></p>')).toBe('hello world');
+  });
+
+  it('handles empty input', () => {
+    expect(stripHtmlTags('')).toBe('');
+  });
+
+  it('handles plain text without tags', () => {
+    expect(stripHtmlTags('just text')).toBe('just text');
+  });
+
+  it('collapses multiple whitespace into single spaces', () => {
+    expect(stripHtmlTags('<div>a</div>   <span>b</span>\n\n<p>c</p>')).toBe('a b c');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// autop
+// ---------------------------------------------------------------------------
+
+describe('autop', () => {
+  it('wraps paragraphs in <p> tags', () => {
+    const html = autop('hello\n\nworld');
+    expect(html).toBe('<p>hello</p>\n<p>world</p>');
+  });
+
+  it('inserts <br /> for single line breaks within paragraphs', () => {
+    const html = autop('line1\nline2');
+    expect(html).toBe('<p>line1<br />line2</p>');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(autop('')).toBe('');
+  });
+
+  it('normalises \\r\\n to \\n', () => {
+    const html = autop('hello\r\n\r\nworld');
+    expect(html).toBe('<p>hello</p>\n<p>world</p>');
+  });
+});

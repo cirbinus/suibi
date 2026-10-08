@@ -1,0 +1,371 @@
+---
+import type { SiteOptions } from '@/lib/options';
+import type { computeUrls } from '@/lib/options';
+import type { UserRow } from '@/lib/context';
+import { hasPermission } from '@/lib/auth';
+import { applyFilterSafely, type HookContext } from '@/lib/plugin';
+import {
+  ADMIN_NOTICE_FLASH_COOKIE,
+  ADMIN_NOTICE_LINK_TEXT_COOKIE,
+  ADMIN_NOTICE_LINK_URL_COOKIE,
+  ADMIN_NOTICE_TYPE_FLASH_COOKIE,
+  getFlashCookieValue,
+  type AdminNoticeType,
+} from '@/lib/flash';
+
+interface Props {
+  title: string;
+  options: SiteOptions;
+  urls: ReturnType<typeof computeUrls>;
+  user: UserRow;
+  activeMenu?: string;
+  bodyClass?: string;
+  addLink?: string;
+  pluginCtx?: HookContext;
+}
+
+const { title, options, urls, user, activeMenu, bodyClass, addLink, pluginCtx } = Astro.props;
+const _pluginCtx: HookContext = pluginCtx ?? { activatedPlugins: new Set<string>() };
+
+const userGroup = user?.group || 'visitor';
+const isAdmin = hasPermission(userGroup, 'administrator');
+const isEditor = hasPermission(userGroup, 'editor');
+const isContributor = hasPermission(userGroup, 'contributor');
+
+// Keep the admin navigation DOM compatible with Typecho 1.3.0.
+const menuGroups = [
+  {
+    label: '控制台',
+    show: isContributor,
+    children: [
+      { label: '概览', href: '/admin/', active: activeMenu === 'dashboard', show: isContributor },
+      { label: '个人设置', href: '/admin/profile', active: activeMenu === 'profile', show: true },
+      { label: '插件', href: '/admin/plugins', active: activeMenu === 'plugins', show: isAdmin },
+      { label: '外观', href: '/admin/themes', active: activeMenu === 'themes', show: isAdmin },
+    ],
+  },
+  {
+    label: '撰写',
+    show: isContributor,
+    children: [
+      { label: '撰写文章', href: '/admin/write-post', active: activeMenu === 'write-post', show: isContributor },
+      { label: '创建页面', href: '/admin/write-page', active: activeMenu === 'write-page', show: isEditor },
+    ],
+  },
+  {
+    label: '管理',
+    show: isContributor,
+    children: [
+      { label: '文章', href: '/admin/manage-posts', active: activeMenu === 'manage-posts', show: isContributor },
+      { label: '独立页面', href: '/admin/manage-pages', active: activeMenu === 'manage-pages', show: isEditor },
+      { label: '评论', href: '/admin/manage-comments', active: activeMenu === 'manage-comments', show: isContributor },
+      { label: '分类', href: '/admin/manage-categories', active: activeMenu === 'manage-categories', show: isEditor },
+      { label: '标签', href: '/admin/manage-tags', active: activeMenu === 'manage-tags', show: isEditor },
+      { label: '文件', href: '/admin/manage-medias', active: activeMenu === 'manage-medias', show: isEditor },
+      { label: '用户', href: '/admin/manage-users', active: activeMenu === 'manage-users', show: isAdmin },
+    ],
+  },
+  {
+    label: '设置',
+    show: isAdmin,
+    children: [
+      { label: '基本', href: '/admin/options-general', active: activeMenu === 'options', show: isAdmin },
+      { label: '评论', href: '/admin/options-discussion', active: activeMenu === 'options-discussion', show: isAdmin },
+      { label: '阅读', href: '/admin/options-reading', active: activeMenu === 'options-reading', show: isAdmin },
+      { label: '永久链接', href: '/admin/options-permalink', active: activeMenu === 'options-permalink', show: isAdmin },
+    ],
+  },
+];
+
+const visibleGroups = menuGroups.filter(g => g.show);
+const adminHeadHtml = await applyFilterSafely(_pluginCtx, 'admin:header', '', { options, urls, user, activeMenu, title });
+const adminFooterHtml = await applyFilterSafely(_pluginCtx, 'admin:footer', '', { options, urls, user, activeMenu, title });
+
+const adminNoticeCookie = Astro.request.headers.get('cookie');
+const adminNotice = getFlashCookieValue(adminNoticeCookie, ADMIN_NOTICE_FLASH_COOKIE);
+const adminNoticeLinkText = getFlashCookieValue(adminNoticeCookie, ADMIN_NOTICE_LINK_TEXT_COOKIE);
+const adminNoticeLinkUrl = getFlashCookieValue(adminNoticeCookie, ADMIN_NOTICE_LINK_URL_COOKIE);
+const adminNoticeTypeValue = getFlashCookieValue(adminNoticeCookie, ADMIN_NOTICE_TYPE_FLASH_COOKIE);
+const adminNoticeType: AdminNoticeType = adminNoticeTypeValue === 'success'
+  || adminNoticeTypeValue === 'error'
+  || adminNoticeTypeValue === 'notice'
+  ? adminNoticeTypeValue
+  : 'notice';
+
+let adminNoticeLinkHref = '';
+if (adminNoticeLinkText && adminNoticeLinkUrl) {
+  try {
+    const siteOrigin = new URL(urls.siteUrl || Astro.url.origin).origin;
+    const linkUrl = new URL(adminNoticeLinkUrl, Astro.url.origin);
+    if ((linkUrl.protocol === 'http:' || linkUrl.protocol === 'https:') && linkUrl.origin === siteOrigin) {
+      adminNoticeLinkHref = linkUrl.href;
+    }
+  } catch {
+    adminNoticeLinkHref = '';
+  }
+}
+const adminNoticeLinkStart = adminNoticeLinkText && adminNotice
+  ? adminNotice.indexOf(`"${adminNoticeLinkText}"`) + 1
+  : -1;
+const canRenderAdminNoticeLink = !!adminNoticeLinkHref
+  && adminNoticeLinkStart > 0
+  && adminNoticeLinkStart + adminNoticeLinkText.length <= adminNotice.length;
+if (adminNotice) {
+  Astro.cookies.delete(ADMIN_NOTICE_FLASH_COOKIE, { path: '/' });
+  Astro.cookies.delete(ADMIN_NOTICE_LINK_TEXT_COOKIE, { path: '/' });
+  Astro.cookies.delete(ADMIN_NOTICE_LINK_URL_COOKIE, { path: '/' });
+  Astro.cookies.delete(ADMIN_NOTICE_TYPE_FLASH_COOKIE, { path: '/' });
+}
+---
+<!DOCTYPE html>
+<html lang={options.lang === 'zh_CN' ? 'zh-CN' : 'en'}>
+<head>
+  <meta charset={options.charset || 'UTF-8'} />
+  <meta name="renderer" content="webkit" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{`${title} - ${options.title}`}</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="/css/normalize.css" />
+  <link rel="stylesheet" href="/css/grid.css" />
+  <link rel="stylesheet" href="/css/admin.css" />
+  {adminHeadHtml && <Fragment set:html={adminHeadHtml} />}
+  <slot name="head" />
+</head>
+<body>
+  <header class="typecho-head-nav" role="navigation">
+    <nav>
+      <details class="menu-bar">
+        <summary>菜单</summary>
+      </details>
+      <menu>
+      {visibleGroups.map(group => {
+        const isFocus = group.children.some(child => child.active);
+        const visibleChildren = group.children.filter(c => c.show);
+        return (
+          <li class:list={{ focus: isFocus }}>
+            <a href={visibleChildren[0]?.href || '#'}>{group.label}</a>
+            <menu>
+              {visibleChildren.map(item => (
+                <li class:list={{ focus: item.active }}>
+                  <a href={item.href}>{item.label}</a>
+                </li>
+              ))}
+            </menu>
+          </li>
+        );
+      })}
+        <li class="operate">
+          <a href="/admin/profile" class="author">{user?.screenName || user?.name}</a>
+          <form method="post" action={urls.logoutUrl} class="logout-form">
+            <button type="submit" class="exit">登出</button>
+          </form>
+          <a href={urls.siteUrl + '/'}>网站</a>
+        </li>
+      </menu>
+    </nav>
+  </header>
+
+  {adminNotice && (
+    <div class={`message popup typecho-admin-notice typecho-dismissible ${adminNoticeType}`} role="status" aria-live="polite">
+      <ul><li>
+        {canRenderAdminNoticeLink ? (
+          <>
+            {adminNotice.slice(0, adminNoticeLinkStart)}
+            <a href={adminNoticeLinkHref}><strong>{adminNoticeLinkText}</strong></a>
+            {adminNotice.slice(adminNoticeLinkStart + adminNoticeLinkText.length)}
+          </>
+        ) : adminNotice}
+      </li></ul>
+      <button type="button" class="typecho-notice-close" aria-label="关闭提示">&times;</button>
+    </div>
+  )}
+
+  <div class="main">
+    <div class="body container">
+      <div class="typecho-page-title">
+        <h2>{title}</h2>
+        {addLink && <a href={addLink}>新增</a>}
+      </div>
+      <slot name="before-main" />
+      <div class:list={['row', 'typecho-page-main', bodyClass]} role="main">
+        <slot />
+      </div>
+    </div>
+  </div>
+
+  <div class="typecho-foot" role="contentinfo">
+    <div class="copyright">
+      <p>&copy; {new Date().getFullYear()} <a href={urls.siteUrl}>{options.title}</a>.
+      Powered by <a href="https://github.com/Tokinx/typecho-workers">Typecho Workers</a>.</p>
+    </div>
+  </div>
+
+  <script is:inline src="/vendor/jquery.js"></script>
+  <script is:inline src="/vendor/jquery-ui.js"></script>
+  <script is:inline src="/vendor/typecho.js"></script>
+  <script is:inline>
+    (function () {
+      $(document).ready(function() {
+        $('.main').on('click', '.typecho-notice-close', function () {
+          $(this).closest('.typecho-dismissible').remove();
+        });
+
+        $('.typecho-admin-notice').stop(true, true).slideDown(function () {
+          var notice = $(this);
+          window.setTimeout(function () {
+            notice.fadeOut(function () { notice.remove(); });
+          }, 5000);
+        });
+
+        function selectionScope(input) {
+          var inputNode = $(input);
+          var list = inputNode.closest('.typecho-list');
+          if (list.length) return list;
+
+          var form = inputNode.closest('form.operate-form');
+          if (form.length) return form.parent();
+
+          return inputNode.closest('form.typecho-list-operate').parent();
+        }
+
+        function listCheckboxes(scope) {
+          var root = $(scope);
+          var tableCheckboxes = root.is('form.operate-form')
+            ? root.find('.typecho-list-table tbody input[type=checkbox]')
+            : root.find('form.operate-form .typecho-list-table tbody input[type=checkbox]');
+          var tagCheckboxes = root.is('form.operate-form')
+            ? root.find('.typecho-list-notable input[type=checkbox]')
+            : root.find('form.operate-form .typecho-list-notable input[type=checkbox]');
+          return tableCheckboxes.add(tagCheckboxes);
+        }
+
+        function syncSelectAll(scope) {
+          var checkboxes = listCheckboxes(scope);
+          var allChecked = checkboxes.length > 0 && checkboxes.filter(':checked').length === checkboxes.length;
+          $('.typecho-table-select-all', scope).prop('checked', allChecked);
+        }
+
+        // Typecho 1.3 tableSelectable: rows toggle their checkbox unless the
+        // click targets an interactive control.
+        $('.typecho-list-table tbody').on('click', 'tr', function (event) {
+          var target = $(event.target);
+          if (target.closest('input, textarea, select, a, button, i, label').length) return;
+
+          var checkbox = $(this).find('input[type=checkbox]').first();
+          if (!checkbox.length) return;
+          checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+        }).on('change', 'input[type=checkbox]', function () {
+          var checkbox = $(this);
+          checkbox.closest('tr').toggleClass('checked', this.checked);
+          syncSelectAll(selectionScope(this));
+        });
+
+        // Tags use the same selectable interaction but are rendered as a
+        // Typecho 1.3 tag cloud rather than a table.
+        $('.typecho-list-notable').on('click', 'li', function (event) {
+          var target = $(event.target);
+          if (target.closest('input, textarea, select, a, button, i, label').length) return;
+
+          var checkbox = $(this).find('input[type=checkbox]').first();
+          if (!checkbox.length) return;
+          checkbox.prop('checked', !checkbox.prop('checked')).trigger('change');
+        }).on('change', 'input[type=checkbox]', function () {
+          var checkbox = $(this);
+          checkbox.closest('li').toggleClass('checked', this.checked);
+          syncSelectAll(selectionScope(this));
+        });
+
+        $('.typecho-list-table tbody input[type=checkbox]').each(function () {
+          $(this).closest('tr').toggleClass('checked', this.checked);
+        });
+        $('.typecho-list-notable input[type=checkbox]').each(function () {
+          $(this).closest('li').toggleClass('checked', this.checked);
+        });
+
+        // 表格全选 - 在 .typecho-list 范围内查找所有 checkbox
+        $('.typecho-table-select-all').on('change', function () {
+          var scope = selectionScope(this);
+          listCheckboxes(scope)
+            .prop('checked', this.checked)
+            .trigger('change');
+        });
+
+        // 下拉菜单显示/隐藏
+        $('.dropdown-toggle').click(function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var menu = $(this).next('.dropdown-menu');
+          // 关闭其他打开的菜单
+          $('.dropdown-menu').not(menu).hide();
+          menu.toggle();
+          return false;
+        });
+
+        // 点击其他区域关闭下拉菜单
+        $(document).click(function () {
+          $('.dropdown-menu').hide();
+        });
+
+        // Controls inside an operation menu, such as category merge targets,
+        // must remain usable without the document-level close handler firing.
+        $('.dropdown-menu').on('click', function (event) {
+          event.stopPropagation();
+        });
+
+        // 批量操作 - dropdown-menu 链接
+        $('.dropdown-menu a[href*="/api/admin/"]').click(function (e) {
+          e.preventDefault();
+          var href = $(this).attr('href');
+          // 在 .typecho-list 范围内查找 operate-form
+          var list = $(this).closest('.typecho-list');
+          // Prefer the named main content form; fall back to any operate-form
+          var form = list.find('form.operate-form[name]');
+          if (!form.length) form = list.find('form.operate-form').first();
+          if (!form.length) form = $(this).closest('form.typecho-list-operate').siblings('form.operate-form').first();
+          if (!form.length) form = $(this).closest('form.operate-form');
+          if (!form.length) return;
+
+          var checked = form.find('input[type=checkbox]:checked').not('.typecho-table-select-all');
+          if (checked.length === 0) {
+            alert('请先选择要操作的项目');
+            return;
+          }
+
+          // Confirm delete actions
+          if (href.indexOf('delete') >= 0) {
+            if (!confirm('确认要执行此操作吗?')) return;
+          }
+
+          form.attr('action', href);
+          form.submit();
+        });
+
+        // 表单提交防重复（不 disable 按钮，否则被点击按钮的 name/value 不会随表单提交）
+        $('.main form').submit(function () {
+          if ($(this).data('submitted')) return false;
+          $(this).data('submitted', true);
+        });
+        // 清除 bfcache 恢复时残留的 submitted 标记，否则后退回来表单无法再次提交
+        $(window).on('pageshow', function () {
+          $('.main form').removeData('submitted');
+        });
+
+        // 外部链接新窗口打开
+        if ($('.typecho-login').length == 0) {
+          $('a').each(function () {
+            var t = $(this), href = t.attr('href');
+            if (href && href[0] == '#') return;
+            if (href && (href.indexOf('/admin') >= 0 || href.indexOf('/api') >= 0)) return;
+            if (href && href.indexOf('://') > 0) {
+              t.attr('target', '_blank').attr('rel', 'noopener noreferrer');
+            }
+          });
+        }
+      });
+    })();
+  </script>
+
+  <slot name="footer" />
+  {adminFooterHtml && <Fragment set:html={adminFooterHtml} />}
+</body>
+</html>

@@ -1,0 +1,30 @@
+---
+import { themeTemplates } from 'virtual:theme-templates';
+import { createContextAlongside } from '@/lib/context';
+import { prepareCategoryData, prepareNotFoundData } from '@/lib/page-data';
+import { findPublicMeta } from '@/lib/public-metas';
+
+const { slug } = Astro.params;
+if (!slug) return Astro.redirect('/');
+
+const [ctx, category] = await createContextAlongside(
+  Astro.locals,
+  Astro.request,
+  db => findPublicMeta(db, 'category', slug),
+);
+const { options } = ctx;
+
+const activeTheme = options.theme || 'typecho-theme-warm';
+const templates = themeTemplates[activeTheme] ?? {};
+const defaultTemplates = themeTemplates['typecho-theme-warm']!;
+let Component = templates.Archive ?? defaultTemplates.Archive!;
+
+let result = await prepareCategoryData(ctx, slug, Astro.request.url, Astro.locals, Astro.url, category);
+if (result instanceof Response) {
+  if (result.status !== 404) return result;
+  Astro.response.status = 404;
+  result = await prepareNotFoundData(ctx, Astro.request.url);
+  Component = templates.NotFound ?? defaultTemplates.NotFound!;
+}
+---
+<Component {...result} />

@@ -1,0 +1,326 @@
+# Typecho-Workers
+
+基于 [Typecho](https://typecho.org) 完整重写的现代博客系统，运行在 **Astro + Cloudflare Workers + D1** 之上。保留 Typecho 核心表结构，支持从 PHP 版 Typecho 直接迁移数据。
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Tokinx/typecho-workers)
+
+---
+
+## 功能特性
+
+**前台**：文章列表 / 分类 / 标签 / 作者 / 搜索归档、嵌套评论（Gravatar 头像）、RSS 2.0 / Atom 1.0 / RSS 1.0、文章密码保护、响应式默认主题
+
+**管理后台**：文章 & 页面编辑管理、评论审核、媒体管理（R2 拖放上传）、用户管理（5 种角色）、主题切换、插件管理（启用/禁用/配置）、全站设置、安装向导
+
+**系统**：主题系统（npm 包分发）、插件系统（Hook 机制，68 个挂载点）、可选 Edge Cache 插件（Cache API + KV + D1 三级缓存）、PHP 版 Typecho 数据迁移工具、PBKDF2-SHA256 认证、CSRF 防护、安全响应头、R2 上传类型校验
+
+---
+
+## 安装部署
+
+### 前置要求
+
+- Node.js ≥ 22.12.0
+- Bun ≥ 1.2（`curl -fsSL https://bun.sh/install | bash`）
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/)（`npm install -g wrangler`）
+- Cloudflare 帐号
+
+### 本地开发
+
+```bash
+# 克隆并安装依赖
+git clone https://github.com/Tokinx/typecho-workers.git
+cd typecho-workers
+bun install
+
+# 启动开发服务器（D1 + R2 由 wrangler 自动模拟）
+bun run dev
+```
+
+访问 http://localhost:4321，首次访问自动跳转安装向导。
+
+### 部署到 Cloudflare
+
+**1. 创建 Cloudflare 资源**
+
+```bash
+# 创建 D1 数据库
+wrangler d1 create typecho-db
+
+# 创建 R2 存储桶
+wrangler r2 bucket create typecho-uploads
+
+# 可选：为 Edge Cache 插件创建 KV L2
+wrangler kv namespace create TYPECHO_CACHE
+```
+
+**2. 更新 `wrangler.toml`**
+
+将 `database_id` 替换为上一步输出的 D1 数据库 ID：
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "typecho-db"
+database_id = "替换为实际的 ID"
+```
+
+启用 Edge Cache 插件时，还需加入命令返回的 KV namespace ID：
+
+```toml
+[[kv_namespaces]]
+binding = "TYPECHO_CACHE"
+id = "替换为实际的 KV namespace ID"
+```
+
+Workers Free 每次请求仅有 10ms CPU，无法完成默认的 600,000 次 PBKDF2。
+接受降低密码哈希强度时，可在 `wrangler.toml` 中显式启用兼容配置：
+
+```toml
+[vars]
+PBKDF2_ITERATIONS = "50000"
+```
+
+该值最低限制为 50,000。移除配置后恢复 600,000；已有高强度密码不会被
+向下降级，低强度密码会在以后使用更高配置成功登录时自动重哈希。
+
+密码 Pepper 必须作为 Cloudflare Secret 保存，不要写入 D1、Git 或普通
+`[vars]`。首次部署前生成 32 字节随机 Pepper：
+
+```bash
+openssl rand -hex 32 | bunx wrangler secret put PASSWORD_PEPPER
+```
+
+启用后，新密码保存为 `$PBKDF2P$iterations$salt$hash`；旧的无 Pepper
+PBKDF2 密码仍可登录，并会在成功登录时自动升级。Pepper 不支持透明轮换：
+删除、丢失或替换 Secret 后，已有 Pepper 密码必须通过“忘记密码”页面，
+或使用带新 `PASSWORD_PEPPER` 环境变量的 CLI 重置工具重新生成。
+
+邮件重置不可用时，可先设置一个新的 Pepper，再用同一个值重置管理员：
+
+```bash
+RECOVERY_PEPPER=$(openssl rand -hex 32)
+printf '%s' "$RECOVERY_PEPPER" | bunx wrangler secret put PASSWORD_PEPPER
+PBKDF2_ITERATIONS=50000 PASSWORD_PEPPER="$RECOVERY_PEPPER" \
+  bun run reset-password:cloudflare -- --user admin
+unset RECOVERY_PEPPER
+```
+
+**3. 构建并部署**
+
+```bash
+bun run deploy
+```
+
+部署完成后访问 Worker URL，首次访问自动跳转安装向导。
+
+### Git 自动部署（不提交 `wrangler.toml`）
+
+Cloudflare Workers Builds 从 Git 检出时没有本地的 `wrangler.toml`。本项目的
+`build:cloudflare` 会在构建前根据构建变量生成一个被忽略的临时配置，供 Astro
+构建流程使用。构建完成后，`@astrojs/cloudflare` 会在 `dist/server/wrangler.json`
+生成完整的部署配置（含全部资源绑定），部署命令直接使用该产物。
+
+在 Cloudflare 的 **Build variables** 中添加以下值：
+
+| 变量 | 值 |
+|------|----|
+| `TYPECHO_D1_DATABASE_ID` | D1 数据库 ID |
+| `TYPECHO_D1_DATABASE_NAME` | D1 数据库名称，例如 `typecho-db` |
+| `TYPECHO_R2_BUCKET_NAME` | R2 存储桶名称，例如 `typecho-uploads` |
+| `TYPECHO_KV_NAMESPACE_ID` | 可选；Edge Cache 插件使用的 KV namespace ID |
+| `TYPECHO_PBKDF2_ITERATIONS` | Workers Free 使用 `50000` |
+| `TYPECHO_WORKER_NAME` | 可选；Worker 名称，默认 `typecho-workers` |
+
+将构建设置改为：
+
+```text
+构建命令：bun run build:cloudflare
+部署命令：bun run deploy:cloudflare-build
+```
+
+该流程不会写入 `PASSWORD_PEPPER` 或 `INSTALL_TOKEN`。首次 Git 部署创建 Worker
+后，在 Worker 的 **Variables and Secrets** 中分别添加这两个 Secret，再重新部署，
+然后才能提交安装表单。
+
+---
+
+## 命令参考
+
+| 命令 | 说明 |
+|------|------|
+| `bun run dev` | 本地开发服务器 |
+| `bun run build` | 生产构建 |
+| `bun run build:cloudflare` | Git 构建前生成被忽略的 Worker 配置，再构建 |
+| `bun run deploy` | 构建 + 部署到 Cloudflare Workers |
+| `bun run deploy:cloudflare-build` | 使用构建产物 `dist/server/wrangler.json` 部署 Worker |
+| `bun run test` | 运行所有测试 |
+| `bun run test:watch` | 监听模式运行测试 |
+| `bun run test:coverage` | 生成覆盖率报告 |
+| `bunx tsc --noEmit` | TypeScript 类型检查 |
+| `bun run db:generate` | 生成 Drizzle 数据库迁移 |
+| `bun run db:studio` | 启动 Drizzle Studio |
+| `bun run db:migrate:typecho` | 从 Typecho SQLite 迁移数据 |
+| `bun run db:migrate:wordpress` | 从 WordPress WXR XML 迁移数据 |
+| `bun run reset-password` | 重置用户密码（本地） |
+| `bun run reset-password:cloudflare` | 重置用户密码（Cloudflare） |
+
+---
+
+## 从 PHP 版 Typecho 迁移
+
+### 迁移步骤
+
+```bash
+# 迁移到 Cloudflare（生产环境）
+bun run db:migrate:typecho -- \
+  --target cloudflare \
+  --source /path/to/typecho.db \
+  --uploads /path/to/usr/uploads
+
+# 迁移到本地（开发调试）
+bun run db:migrate:typecho -- \
+  --target local \
+  --source /path/to/typecho.db \
+  --uploads /path/to/usr/uploads
+
+# 预览模式（不写入任何数据）
+bun run db:migrate:typecho -- \
+  --target local \
+  --dry-run \
+  --source /path/to/typecho.db \
+  --uploads /path/to/usr/uploads
+```
+
+### 迁移参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--source`, `-s` | 源 SQLite 数据库路径 | （必填） |
+| `--uploads`, `-u` | 源 `usr/uploads/` 目录 | （必填） |
+| `--prefix` | 源表前缀 | `typecho_` |
+| `--target`, `-t` | 迁移目标：`local` 或 `cloudflare` | `local` |
+| `--dry-run`, `-n` | 预览模式 | `false` |
+| `--site-url` | 新站点 URL（用于重写附件 URL） | — |
+| `--d1-name` | D1 数据库名或 binding | `DB` |
+| `--r2-bucket` | R2 存储桶名 | `typecho-uploads` |
+
+### 迁移后重置密码
+
+密码哈希算法不兼容（PHP phpass → PBKDF2-SHA256，默认 600,000 次迭代、可按部署配置 + 16B salt），迁移后需重置密码：
+
+```bash
+# 本地
+bun run reset-password
+
+# Cloudflare
+bun run reset-password:cloudflare
+```
+
+## 从 WordPress 迁移
+
+### 迁移步骤
+
+```bash
+# 迁移到 Cloudflare（生产环境），并下载正文引用的媒体到 R2
+bun run db:migrate:wordpress -- \
+  --target cloudflare \
+  --source WordPress.2026-07-29.xml \
+  --author-id 1 \
+  --site-url https://blog.example.com \
+  --download-media
+
+# 迁移到本地（开发调试）
+bun run db:migrate:wordpress -- \
+  --target local \
+  --source WordPress.2026-07-29.xml \
+  --author-id 1
+
+# 预览模式（不写入任何数据）
+bun run db:migrate:wordpress -- \
+  --dry-run \
+  --source WordPress.2026-07-29.xml \
+  --author-id 1
+```
+
+### 迁移参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `--source`, `-s` | WordPress WXR XML 文件 | （必填） |
+| `--target`, `-t` | 迁移目标：`local` 或 `cloudflare` | `local` |
+| `--author-id` | 目标站中接收导入内容的现有用户 ID | `1` |
+| `--site-url` | 新站点 URL；下载媒体时必填 | — |
+| `--download-media` | 下载正文引用的媒体到 R2 并重写 URL；每个文件失败后重试 3 次，仍失败时保留原 URL 并在结束时汇总 | `false` |
+| `--media-concurrency` | 媒体传输并发数（1-16） | `4` |
+| `--max-media-mb` | 单个媒体文件的最大大小（MB） | `50` |
+| `--skip-attachments` | 不创建附件内容记录 | `false` |
+| `--override` | 覆盖现有内容与评论，并保留 WordPress ID | `false` |
+| `--dry-run`, `-n` | 预览模式 | `false` |
+| `--d1-name` | D1 数据库名 | `typecho-db` |
+| `--r2-bucket` | R2 存储桶名 | `typecho-uploads` |
+| `--output-sql` | 同时写出生成的 SQL 文件 | — |
+
+执行前请备份目标 D1。`--override true` 会清空内容（含附件）、评论、字段和关系，
+并以原始 `post_id` / `comment_id` 写入内容和评论；用户、站点设置、分类、标签与 R2 对象会保留。
+
+---
+
+## 插件开发
+
+参考 [插件开发规范](src/plugins/README.md)。
+
+---
+
+## 主题开发
+
+参考 [主题开发规范](src/themes/README.md)。
+
+---
+
+## 技术栈
+
+| 组件 | 技术 |
+|------|------|
+| 框架 | [Astro](https://astro.build) 7.x (SSR) |
+| 运行时 | [Cloudflare Workers](https://workers.cloudflare.com) |
+| 数据库 | [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite) |
+| ORM | [Drizzle ORM](https://orm.drizzle.team) |
+| 文件存储 | [Cloudflare R2](https://developers.cloudflare.com/r2/) |
+| 测试 | [Vitest](https://vitest.dev) |
+| 包管理 | bun |
+
+---
+
+## 安全与测试约束
+
+- 管理 API 必须通过 `requireAdminAction()` 做登录、权限与 CSRF 校验；重定向回后台页面必须使用同源且仅限 `/admin` 路径的安全回跳。
+- 评论来源与评论提交后的回跳只按 URL `origin` 判定可信来源，禁止用字符串前缀或仅 host 比较。
+- 前台、后台、插件路由和缓存命中的响应都由中间件补齐基础安全响应头。
+- 新增功能和 bug 修复必须补对应回归测试，并同时通过 `bun run test` 与 `bunx tsc --noEmit`。
+
+---
+
+## 与 PHP 版 Typecho 兼容性
+
+| 方面 | 状态 |
+|------|------|
+| 数据库结构 | ✅ 7 张核心表兼容；运行时会幂等补齐登录限速、密码重置和 Edge Cache L3 缓存表（typecho_db_cache） |
+| 默认主题样式 | ✅ CSS & HTML 结构保持一致 |
+| URL 结构 | ✅ 路由规则与 Typecho 默认配置一致 |
+| 密码哈希 | ⚠️ 迁移后需重置密码（算法不同） |
+| PHP 主题 / 插件 | ❌ 需按新格式重新封装（TypeScript / npm 包） |
+
+---
+
+## 许可证
+
+MIT
+
+---
+
+## 开发指南
+
+- 插件开发规范：[src/plugins/README.md](src/plugins/README.md)
+- 主题开发规范：[src/themes/README.md](src/themes/README.md)
+- AI Agent 开发规范：[AGENTS.md](AGENTS.md)

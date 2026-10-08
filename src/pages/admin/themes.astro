@@ -1,0 +1,136 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { createContext, requireAuth } from '@/lib/context';
+import { hasPermission, requireAdminCSRF } from '@/lib/auth';
+import {
+  getAvailableThemes,
+  themeExists,
+  themeHasConfig,
+} from '@/lib/theme';
+
+const ctx = await createContext(Astro.locals, Astro.request);
+const authCheck = requireAuth(ctx);
+if (authCheck) return authCheck;
+
+if (!hasPermission(ctx.user!.group || 'visitor', 'administrator')) {
+  return new Response('Forbidden', { status: 403 });
+}
+
+const { options, urls, user, csrfToken } = ctx;
+let message = '';
+let messageType: 'success' | 'error' = 'success';
+
+if (Astro.request.method === 'POST') {
+  const csrfError = await requireAdminCSRF(Astro.request, options.secret as string, user!.authCode!, user!.uid);
+  if (csrfError) return csrfError;
+
+  try {
+    const formData = await Astro.request.formData();
+    const action = String(formData.get('action') || '');
+    const themeId = String(formData.get('theme') || '');
+
+    if (action === 'activate' && themeId) {
+      if (!themeExists(themeId)) {
+        message = `主题 "${themeId}" 不存在`;
+        messageType = 'error';
+      } else if (themeId !== String(options.theme || 'typecho-theme-warm')) {
+        const { mutateOptionsBatch } = await import('@/lib/options');
+        const previousThemeId = String(options.theme || 'typecho-theme-warm');
+        const optionSets: Record<string, string> = { theme: themeId };
+
+        // Typecho removes the previous theme's settings when a new theme is
+        // enabled. Settings for an already configured target theme remain.
+        if (themeHasConfig(themeId) && !options[`theme:${themeId}`]) {
+          const { getThemeConfigDefaults } = await import('@/lib/theme');
+          optionSets[`theme:${themeId}`] = JSON.stringify(getThemeConfigDefaults(themeId));
+        }
+        await mutateOptionsBatch(ctx.db, {
+          set: optionSets,
+          delete: [`theme:${previousThemeId}`],
+        });
+
+        delete (options as any)[`theme:${previousThemeId}`];
+        for (const [name, value] of Object.entries(optionSets)) (options as any)[name] = value;
+        (options as any).theme = themeId;
+        message = `外观已切换为 "${themeId}"`;
+      }
+    }
+  } catch {
+    message = '操作失败';
+    messageType = 'error';
+  }
+}
+
+const activeThemeId = String(options.theme || 'typecho-theme-warm');
+const themes = getAvailableThemes(activeThemeId);
+const activeTheme = themes.find((theme) => theme.isActive) || themes[0];
+const canConfigureTheme = !!activeTheme && themeHasConfig(activeTheme.id);
+
+function screenshotUrl(theme: (typeof themes)[number]): string {
+  const configured = theme.manifest.screenshot;
+  if (!configured) return '/img/noscreen.png';
+  const extension = configured.split('.').pop() || 'png';
+  return `/themes/${theme.id}/screenshot.${extension}`;
+}
+---
+<Admin title="外观" options={options} urls={urls} user={user} activeMenu="themes" pluginCtx={ctx}>
+  <Fragment slot="before-main">
+    <ul class="typecho-option-tabs fix-tabs">
+      <li class="current"><a href="/admin/themes">可以使用的外观</a></li>
+      {canConfigureTheme && <li><a href="/admin/options-theme">设置外观</a></li>}
+    </ul>
+  </Fragment>
+  <div class="col-mb-12">
+    {message && (
+      <div class={`notice typecho-dismissible ${messageType === 'error' ? 'notice-error' : ''}`}>
+        <p>{message}</p>
+        <button type="button" class="typecho-notice-close" aria-label="关闭提示">&times;</button>
+      </div>
+    )}
+
+    <table class="typecho-list-table typecho-theme-list">
+      <colgroup>
+        <col width="35%" />
+        <col />
+      </colgroup>
+      <thead>
+        <tr>
+          <th>截图</th>
+          <th>详情</th>
+        </tr>
+      </thead>
+      <tbody>
+        {themes.length === 0 ? (
+          <tr><td colspan="2"><h6 class="typecho-list-table-title">没有安装外观</h6></td></tr>
+        ) : themes.map((theme) => {
+          const image = screenshotUrl(theme);
+          const authorUrl = theme.manifest.authorUrl || theme.manifest.homepage;
+          return (
+            <tr id={`theme-${theme.id}`} class:list={{ current: theme.isActive }}>
+              <td valign="top">
+                <img src={image} alt={theme.manifest.name || theme.id} />
+              </td>
+              <td valign="top">
+                <h3>{theme.manifest.name || theme.id}</h3>
+                <cite>
+                  {theme.manifest.author && <>作者: {authorUrl ? <a href={authorUrl} target="_blank" rel="noopener noreferrer">{theme.manifest.author}</a> : theme.manifest.author}</>}
+                  {theme.manifest.author && theme.manifest.version && '　'}
+                  {theme.manifest.version && <>版本: {theme.manifest.version}</>}
+                </cite>
+                {theme.manifest.description && <p>{theme.manifest.description}</p>}
+                {!theme.isActive && (
+                  <form method="post" action="/admin/themes">
+                    <input type="hidden" name="_" value={csrfToken} />
+                    <input type="hidden" name="action" value="activate" />
+                    <input type="hidden" name="theme" value={theme.id} />
+                    <button type="submit" class="btn btn-xs">启用</button>
+                  </form>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+</Admin>

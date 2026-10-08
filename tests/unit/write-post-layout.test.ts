@@ -1,0 +1,121 @@
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const source = readFileSync(
+  join(process.cwd(), 'src/pages/admin/write-post.astro'),
+  'utf-8',
+);
+
+describe('Typecho 1.3 post editor layout', () => {
+  it('only renders an editable slug when the permalink format contains {slug}', () => {
+    expect(source).toContain('renderPermalinkPattern');
+    expect(source).toContain("const allowsSlugEdit = postPermalinkPattern.includes('{slug}')");
+    expect(source).toContain('const siteUrl = urls.siteUrl.replace(');
+    expect(source).not.toContain('new URL(permalinkPath');
+    expect(source).toContain('id="slug" name="slug"');
+    expect(source).toContain('{allowsSlugEdit ? (');
+    expect(source).not.toContain('edit-slug-btn');
+  });
+
+  it('does not report the slug width initialization as an edit', () => {
+    const slugSection = source.slice(source.indexOf('// 缩略名'), source.indexOf('// ========== 标签自动完成'));
+
+    expect(slugSection).toContain('}).each(function () {');
+    expect(slugSection).not.toContain(".trigger('input')");
+  });
+
+  it('places custom fields below the editor rather than in the right sidebar', () => {
+    const editor = source.indexOf('id="text" name="text"');
+    const customField = source.indexOf('id="custom-field"');
+    const sidebar = source.indexOf('id="edit-secondary"');
+
+    expect(editor).toBeGreaterThan(-1);
+    expect(customField).toBeGreaterThan(editor);
+    expect(customField).toBeLessThan(sidebar);
+  });
+
+  it('uses the Typecho 1.3 details-based custom field layout', () => {
+    expect(source).toContain('<details id="custom-field" class="typecho-post-option"');
+    expect(source).toContain('<summary>自定义字段</summary>');
+    expect(source).toContain('<ul class="fields mono">');
+    expect(source).toContain('<li class="field">');
+    expect(source).toContain('class="field-name"');
+    expect(source).toContain('class="field-value"');
+    expect(source).toContain('+添加字段');
+    expect(source).toContain('{customFields.length === 0 && (');
+    expect(source).toContain('placeholder="字段名称"');
+    expect(source).toContain('name="fieldTypes[newfield_0]"');
+    expect(source).not.toContain('custom-fields-table');
+  });
+
+  it('selects the configured default category when writing a new post', () => {
+    expect(source).toContain('const defaultCategory = Number(options.defaultCategory);');
+    expect(source).toContain('postCategories = [defaultCategory];');
+  });
+
+  it('orders the right-side modules like Typecho 1.3 and includes Trackback', () => {
+    const date = source.indexOf('发布日期');
+    const category = source.indexOf('>分类<');
+    const tags = source.indexOf('>标签<');
+    const advanced = source.indexOf('<details id="advance-panel">');
+
+    expect(date).toBeLessThan(category);
+    expect(category).toBeLessThan(tags);
+    expect(tags).toBeLessThan(advanced);
+    expect(source).toContain('id="trackback"');
+    expect(source).toContain('name="trackback"');
+  });
+
+  it('uses the Typecho date-time picker instead of a browser datetime input', () => {
+    expect(source).toContain('class="typecho-date w-100" type="text" name="date" id="date"');
+    expect(source).toContain('/vendor/timepicker.js');
+    expect(source).toContain("dateInput.mask('9999-99-99 99:99').datetimepicker({");
+    expect(source).toContain("currentText: '现在'");
+    expect(source).toContain("closeText: '完成'");
+    expect(source).not.toContain('datetime-local');
+  });
+
+  it('includes the preview icon and persistent editor resize handle', () => {
+    expect(source).toContain('<i class="i-exlink"></i> 预览文章');
+    expect(source).toContain('/api/admin/editor-size');
+    expect(source).toContain('class="resize"');
+    expect(source).toContain("textarea.blur().css('opacity', 0.25)");
+    expect(source).toContain("textarea.css('opacity', 1)");
+  });
+
+  it('opens the saved draft in a full-theme preview iframe', () => {
+    expect(source).toContain("$(document.body).addClass('fullscreen preview')");
+    expect(source).toContain(".attr('src', '/admin/preview?cid=' + encodeURIComponent(cid))");
+    expect(source).toContain(".attr('sandbox', 'allow-same-origin allow-scripts')");
+    expect(source).toContain("window.confirm('修改后的内容需要保存后才能预览, 是否保存?')");
+    expect(source).toContain('previewData(draftId || cid)');
+    expect(source).toContain("$(window).on('message.writePostPreview'");
+    expect(source).not.toContain("$('.wmd-edittab a[href=\"#wmd-preview\"]').trigger('click')");
+  });
+
+  it('sends the CSRF header with attachment upload and deletion requests', () => {
+    const attachmentSection = source.slice(source.indexOf('// ========== 文件上传 =========='));
+    const csrfHeader = "headers: { 'X-CSRF-Token': String($('form[name=\"write_post\"] input[name=\"_\"]').val() || '') },";
+
+    expect(attachmentSection).toContain("url: '/api/admin/upload'");
+    expect(attachmentSection).toContain("url: '/api/admin/upload?cid=' + attachCid");
+    expect(attachmentSection.match(new RegExp(csrfHeader.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'))).toHaveLength(2);
+  });
+
+  it('uses personal writing preferences for defaults and autosave', () => {
+    expect(source).toContain("inArray(schema.options.name, ['markdown', 'autoSave'");
+    expect(source).toContain("userPreference('markdown'");
+    expect(source).toContain("userPreference('defaultAllowComment'");
+    expect(source).toContain('data-auto-save={autoSave ? \'1\' : \'0\'}');
+    expect(source).toContain("data.set('autosave', '1')");
+    expect(source).toContain('name="autosaveDraftId"');
+  });
+
+  it('does not warn about leaving after a publish or draft save is submitted', () => {
+    expect(source).toContain('submitting = false');
+    expect(source).toContain('submitting = true;');
+    expect(source).toContain('changed = false;');
+    expect(source).toContain("if (!submitting && changed) return '内容已经改变尚未保存, 您确认要离开此页面吗?';");
+  });
+});

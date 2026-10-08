@@ -1,0 +1,66 @@
+{
+  "name": "typecho-workers",
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Typecho blog rewrite with Astro + Cloudflare Workers + D1",
+  "exports": {
+    "./plugin-sdk": "./src/lib/plugin-sdk.ts",
+    "./db": "./src/db/index.ts"
+  },
+  "workspaces": [
+    "src/plugins/*",
+    "src/themes/*"
+  ],
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev --force",
+    "build": "astro build",
+    "generate:cloudflare-config": "bun run scripts/generate-wrangler-config.ts",
+    "patch:deploy-wrangler": "bun run scripts/patch-deploy-wrangler.ts",
+    "build:cloudflare": "bun run generate:cloudflare-config && astro build && bun run patch:deploy-wrangler",
+    "deploy": "bun run build && bun run patch:deploy-wrangler && wrangler deploy --config dist/server/wrangler.json",
+    "deploy:cloudflare-build": "wrangler deploy --config dist/server/wrangler.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "db:generate": "drizzle-kit generate",
+    "db:studio": "drizzle-kit studio",
+    "db:migrate:typecho": "bun run scripts/migrate.ts",
+    "db:migrate:wordpress": "bun run scripts/migrate-wordpress.ts",
+    "reset-password": "bun run scripts/reset-password.ts --target local",
+    "reset-password:cloudflare": "bun run scripts/reset-password.ts --target cloudflare",
+    "perf:metrics": "bun run scripts/analyze-metrics.ts",
+    "perf:usage": "bun run scripts/analyze-usage.ts",
+    "perf:warm": "bun run scripts/warm-cache.ts",
+    "perf:baseline": "bun run scripts/capture-baseline.ts"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.1.5",
+    "@simplewebauthn/server": "^14.0.1",
+    "astro": "^7.1.4",
+    "drizzle-orm": "^0.45.2",
+    "marked": "^18.0.7",
+    "sanitize-html": "^2.17.6",
+    "tslib": "^2.8.1",
+    "typecho-plugin-antispam": "workspace:*",
+    "typecho-plugin-cache": "workspace:*",
+    "typecho-plugin-notes": "workspace:*",
+    "typecho-plugin-notifier": "workspace:*",
+    "typecho-plugin-engine": "workspace:*",
+    "typecho-plugin-turnstile": "workspace:*",
+    "typecho-theme-warm": "workspace:*"
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.17.4",
+    "@types/sanitize-html": "^2.16.1",
+    "@vitest/coverage-v8": "^4.1.10",
+    "drizzle-kit": "^0.31.10",
+    "esbuild": "^0.28.1",
+    "fast-xml-parser": "^5.10.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wrangler": "^4.114.0"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "name": "typecho-plugin-notes",
+  "version": "1.0.0",
+  "description": "Twitter-style notes and topics for Typecho-Workers.",
+  "keywords": ["typecho", "plugin", "notes", "microblog", "topic"],
+  "author": "Tokinx",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.ts",
+  "typecho": {
+    "plugin": {
+      "id": "typecho-plugin-notes",
+      "name": "Notes",
+      "description": "扩展 note 内容类型，提供快速发布、笔记时间线和 Topic 管理页面",
+      "adminPage": "notes",
+      "author": "Tokinx",
+      "authorUrl": "https://biji.io",
+      "version": "1.0.0",
+      "homepage": "https://github.com/Tokinx/typecho-workers/tree/master/src/plugins/typecho-plugin-notes",
+      "license": "MIT",
+      "tags": ["note", "microblog", "topic"]
+    }
+  }
+}

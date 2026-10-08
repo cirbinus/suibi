@@ -1,0 +1,224 @@
+---
+import { createContext } from '@/lib/context';
+import { LOGIN_ERROR_FLASH_COOKIE, REGISTER_NOTICE_FLASH_COOKIE, clearFlashCookieHeader, getFlashCookieValue } from '@/lib/flash';
+import { applyFilterSafely } from '@/lib/plugin';
+import { safeAdminRedirectUrl } from '@/lib/admin-auth';
+
+let options: any = { title: 'Blog', charset: 'UTF-8', lang: 'zh_CN', description: '' };
+let urls: any = { siteUrl: '' };
+let loginHeadHtml = '';
+let loginFormHtml = '';
+
+try {
+  const ctx = await createContext(Astro.locals, Astro.request);
+  options = ctx.options;
+  urls = ctx.urls;
+
+  // If already logged in, redirect to admin
+  if (ctx.isLoggedIn) {
+    return Astro.redirect('/admin/');
+  }
+
+  [loginHeadHtml, loginFormHtml] = await Promise.all([
+    applyFilterSafely(ctx, 'admin:loginHead', '', { options }),
+    applyFilterSafely(ctx, 'admin:loginForm', '', { options }),
+  ]);
+} catch {
+  // DB not initialized - redirect to install
+  return Astro.redirect('/install');
+}
+
+const cookieHeader = Astro.request.headers.get('cookie');
+const error = getFlashCookieValue(cookieHeader, LOGIN_ERROR_FLASH_COOKIE);
+if (error) {
+  Astro.response.headers.append('Set-Cookie', clearFlashCookieHeader(LOGIN_ERROR_FLASH_COOKIE, { path: '/admin/login', request: Astro.request }));
+}
+const notice = getFlashCookieValue(cookieHeader, REGISTER_NOTICE_FLASH_COOKIE);
+if (notice) {
+  Astro.response.headers.append('Set-Cookie', clearFlashCookieHeader(REGISTER_NOTICE_FLASH_COOKIE, { path: '/admin/login', request: Astro.request }));
+}
+
+// Preserve a ?redirect=/admin/... query so users can be returned to
+// where they came from after login. The same allow-list logic used by
+// admin POST handlers applies here.
+const redirectInput = Astro.url.searchParams.get('redirect') || '/admin/';
+const refererAbsolute = (() => {
+  try { return new URL(redirectInput, urls.siteUrl || Astro.url.origin).toString(); } catch { return urls.siteUrl || '/admin/'; }
+})();
+const refererValue = safeAdminRedirectUrl(refererAbsolute, urls.siteUrl || Astro.url.origin, '/admin/');
+---
+<!DOCTYPE html>
+<html lang={options.lang === 'zh_CN' ? 'zh-CN' : 'en'}>
+<head>
+  <meta charset={options.charset || 'UTF-8'} />
+  <meta name="renderer" content="webkit" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>{`登录 - ${options.title}`}</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="stylesheet" href="/css/normalize.css" />
+  {loginHeadHtml && <Fragment set:html={loginHeadHtml} />}
+  <link rel="stylesheet" href="/css/grid.css" />
+  <link rel="stylesheet" href="/css/admin.css" />
+</head>
+<body class="body-100">
+  <div class="typecho-login-wrap">
+    <div class="typecho-login">
+      <h1>{options.title}</h1>
+      {error && (
+        <p class="message error typecho-dismissible">
+          {error}
+          <button type="button" class="typecho-notice-close" aria-label="关闭提示">&times;</button>
+        </p>
+      )}
+      {notice && (
+        <p class="message success typecho-dismissible">
+          {notice}
+          <button type="button" class="typecho-notice-close" aria-label="关闭提示">&times;</button>
+        </p>
+      )}
+      <form action="/api/users/login" method="post" name="login" id="login-form" role="form">
+        <p>
+          <label for="name" class="sr-only">用户名或邮箱</label>
+          <input type="text" id="name" name="name" placeholder="用户名或邮箱" class="text-l w-100" autofocus required />
+        </p>
+        <p>
+          <label for="password" class="sr-only">密码</label>
+          <input type="password" id="password" name="password" placeholder="密码" class="text-l w-100" required />
+        </p>
+        {loginFormHtml && <Fragment set:html={loginFormHtml} />}
+        <p class="submit">
+          <button type="submit" class="btn btn-l w-100 primary">登录</button>
+          <input type="hidden" name="referer" value={refererValue} />
+        </p>
+        <p>
+          <label for="remember">
+            <input type="checkbox" name="remember" class="checkbox" value="1" id="remember" /> 下次自动登录
+          </label>
+        </p>
+      </form>
+      <p class="submit" style="margin-top:12px">
+        <button type="button" class="btn btn-l w-100" id="passkey-login">使用通行密钥登录</button>
+      </p>
+      <p id="passkey-login-status" class="message error" style="display:none" role="status"></p>
+      <p class="more-link">
+        <a href="/admin/forgot-password">忘记密码？</a>
+        &nbsp;·&nbsp;
+        <a href={urls.siteUrl + '/'}>返回首页</a>
+      </p>
+    </div>
+  </div>
+  <script is:inline>
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!(target instanceof HTMLElement) || !target.classList.contains('typecho-notice-close')) return;
+      var notice = target.closest('.typecho-dismissible');
+      if (notice && notice.parentNode) {
+        notice.parentNode.removeChild(notice);
+      }
+    });
+
+    (function () {
+      var btn = document.getElementById('passkey-login');
+      var status = document.getElementById('passkey-login-status');
+      var nameInput = document.getElementById('name');
+      var rememberInput = document.getElementById('remember');
+      var refererInput = document.querySelector('#login-form input[name="referer"]');
+      if (!btn) return;
+
+      function showError(msg) {
+        if (!status) return;
+        status.style.display = msg ? 'block' : 'none';
+        status.textContent = msg || '';
+      }
+
+      function b64urlToBuffer(value) {
+        var padded = value.replace(/-/g, '+').replace(/_/g, '/');
+        while (padded.length % 4) padded += '=';
+        var binary = atob(padded);
+        var bytes = new Uint8Array(binary.length);
+        for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return bytes.buffer;
+      }
+
+      function bufferToB64url(buffer) {
+        var bytes = new Uint8Array(buffer);
+        var binary = '';
+        for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+      }
+
+      function prepRequestOptions(options) {
+        var pub = Object.assign({}, options);
+        pub.challenge = b64urlToBuffer(options.challenge);
+        if (options.allowCredentials) {
+          pub.allowCredentials = options.allowCredentials.map(function (c) {
+            return Object.assign({}, c, { id: b64urlToBuffer(c.id) });
+          });
+        }
+        return pub;
+      }
+
+      function assertionToJSON(cred) {
+        var response = cred.response;
+        return {
+          id: cred.id,
+          rawId: bufferToB64url(cred.rawId),
+          type: cred.type,
+          clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+          response: {
+            clientDataJSON: bufferToB64url(response.clientDataJSON),
+            authenticatorData: bufferToB64url(response.authenticatorData),
+            signature: bufferToB64url(response.signature),
+            userHandle: response.userHandle ? bufferToB64url(response.userHandle) : undefined,
+          },
+        };
+      }
+
+      btn.addEventListener('click', async function () {
+        if (!window.PublicKeyCredential) {
+          showError('当前浏览器不支持通行密钥');
+          return;
+        }
+        btn.disabled = true;
+        showError('');
+        try {
+          var name = nameInput && nameInput.value ? nameInput.value.trim() : '';
+          var optRes = await fetch('/api/users/passkey/login-options', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(name ? { name: name } : {}),
+          });
+          var optData = await optRes.json();
+          if (!optRes.ok) throw new Error(optData.error || '无法开始通行密钥登录');
+
+          var assertion = await navigator.credentials.get({
+            publicKey: prepRequestOptions(optData.options),
+          });
+          if (!assertion) throw new Error('未完成通行密钥验证');
+
+          var loginRes = await fetch('/api/users/passkey/login', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              challengeToken: optData.challengeToken,
+              response: assertionToJSON(assertion),
+              remember: !!(rememberInput && rememberInput.checked),
+              referer: refererInput ? refererInput.value : '/admin/',
+            }),
+          });
+          var loginData = await loginRes.json();
+          if (!loginRes.ok) throw new Error(loginData.error || '通行密钥登录失败');
+          window.location.href = loginData.redirect || '/admin/';
+        } catch (err) {
+          var msg = err && err.name === 'NotAllowedError' ? '已取消或被浏览器拒绝' : (err.message || '通行密钥登录失败');
+          showError(msg);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

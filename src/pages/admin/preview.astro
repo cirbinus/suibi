@@ -1,0 +1,53 @@
+---
+import { themeTemplates } from 'virtual:theme-templates';
+import { createContextAlongside, requireAuth } from '@/lib/context';
+import { hasPermission } from '@/lib/auth';
+import { schema } from '@/db';
+import { preparePageData, preparePostData } from '@/lib/page-data';
+import { eq } from 'drizzle-orm';
+
+const cid = parseInt(Astro.url.searchParams.get('cid') || '0', 10);
+if (!cid) return new Response('missing cid', { status: 400 });
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+const [ctx, row] = await createContextAlongside(
+  Astro.locals,
+  Astro.request,
+  db => db.query.contents.findFirst({ where: eq(schema.contents.cid, cid) }),
+);
+const authCheck = requireAuth(ctx);
+if (authCheck) return authCheck;
+
+if (!row) return new Response('Not Found', { status: 404 });
+
+// Permission: contributors preview their own; editors+ preview any
+if (!hasPermission(ctx.user!.group || 'visitor', 'editor') && row.authorId !== ctx.user!.uid) {
+  return new Response('Forbidden', { status: 403 });
+}
+
+const activeTheme = (ctx.options.theme as string) || 'typecho-theme-warm';
+const templates = themeTemplates[activeTheme] ?? {};
+const defaults = themeTemplates['typecho-theme-warm']!;
+
+const isPage = row.type === 'page' || row.type === 'page_draft';
+const customPageTemplate = isPage && row.template
+  ? templates.PageTemplates?.[row.template]?.Component
+  : undefined;
+const Template = isPage
+  ? (customPageTemplate ?? templates.Page ?? defaults.Page!)
+  : (templates.Post ?? defaults.Post!);
+
+const data = isPage
+  ? await preparePageData(ctx, row.slug || String(row.cid), Astro.request.url, null, row, null, { previewMode: true })
+  : await preparePostData(ctx, row.cid, Astro.request.url, null, row, null, { previewMode: true });
+if (data instanceof Response) return data;
+---
+
+<Template {...data} />
+<script define:vars={{ parentOrigin: Astro.url.origin }}>
+  window.addEventListener('beforeunload', function () {
+    if (window.parent !== window) {
+      window.parent.postMessage('cancelPreview', parentOrigin);
+    }
+  });
+</script>

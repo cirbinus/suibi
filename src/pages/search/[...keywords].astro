@@ -1,0 +1,34 @@
+---
+import { themeTemplates } from 'virtual:theme-templates';
+import { createContext } from '@/lib/context';
+import { decodeSearchKeywords, prepareNotFoundData, prepareSearchData } from '@/lib/page-data';
+
+const { keywords } = Astro.params;
+const decodedKeywords = decodeSearchKeywords(keywords);
+const searchKeywords = decodedKeywords.value;
+const malformedKeywords = decodedKeywords.malformed;
+if (!searchKeywords && !malformedKeywords) return Astro.redirect('/');
+
+const ctx = await createContext(Astro.locals, Astro.request);
+const { options } = ctx;
+
+const activeTheme = options.theme || 'typecho-theme-warm';
+const templates = themeTemplates[activeTheme] ?? {};
+const defaultTemplates = themeTemplates['typecho-theme-warm']!;
+let Component = templates.Archive ?? defaultTemplates.Archive!;
+let result;
+if (malformedKeywords) {
+  Astro.response.status = 404;
+  result = await prepareNotFoundData(ctx, Astro.request.url);
+  Component = templates.NotFound ?? defaultTemplates.NotFound!;
+} else {
+  result = await prepareSearchData(ctx, searchKeywords, Astro.request.url, Astro.locals, Astro.url);
+  if (result instanceof Response) {
+    if (result.status !== 404) return result;
+    Astro.response.status = 404;
+    result = await prepareNotFoundData(ctx, Astro.request.url);
+    Component = templates.NotFound ?? defaultTemplates.NotFound!;
+  }
+}
+---
+<Component {...result} />

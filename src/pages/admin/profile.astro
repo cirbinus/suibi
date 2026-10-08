@@ -1,0 +1,396 @@
+---
+import Admin from '@/layouts/Admin.astro';
+import { createContext, requireAuth } from '@/lib/context';
+import { hasPermission } from '@/lib/auth';
+import { formatDate } from '@/lib/content';
+import { resolveGravatarUrl } from '@/lib/gravatar';
+import { applyFilterSafely } from '@/lib/plugin';
+import { eq, and, inArray, sql } from 'drizzle-orm';
+import { schema } from '@/db';
+
+const ctx = await createContext(Astro.locals, Astro.request);
+const authCheck = requireAuth(ctx);
+if (authCheck) return authCheck;
+
+const { db, options, urls, user, csrfToken } = ctx;
+
+// Stats share one D1 round trip; Gravatar hashing is independent CPU work.
+const [stats, gravatarUrl] = await Promise.all([
+  db.batch([
+    db.select({ count: sql<number>`count(*)` }).from(schema.contents)
+      .where(and(eq(schema.contents.type, 'post'), eq(schema.contents.status, 'publish'), eq(schema.contents.authorId, user!.uid))),
+    db.select({ count: sql<number>`count(*)` }).from(schema.comments)
+      .where(eq(schema.comments.ownerId, user!.uid)),
+    db.select({ count: sql<number>`count(*)` }).from(schema.metas)
+      .where(eq(schema.metas.type, 'category')),
+    db.select({ name: schema.options.name, value: schema.options.value }).from(schema.options)
+      .where(and(
+        eq(schema.options.user, user!.uid),
+        inArray(schema.options.name, [
+          'markdown', 'autoSave',
+          'defaultAllowComment', 'defaultAllowFeed',
+        ]),
+      )),
+  ]),
+  resolveGravatarUrl(ctx, user!.mail, { size: 220, defaultImage: 'mp' }, {
+    options,
+    request: Astro.request,
+  }),
+]);
+const [postCount, commentCount, catCount, userOptionRows] = stats;
+const userOptions = new Map(userOptionRows.map((option) => [option.name, option.value]));
+const isContributor = hasPermission(user!.group || 'visitor', 'contributor');
+const preference = (name: string, fallback: number) => Number(userOptions.get(name) ?? fallback) === 1;
+const writingPreferences = {
+  markdown: preference('markdown', Number(options.markdown) || 0),
+  autoSave: preference('autoSave', Number(options.autoSave) || 0),
+  defaultAllowComment: preference('defaultAllowComment', Number(options.defaultAllowComment) || 0),
+  defaultAllowFeed: preference('defaultAllowFeed', Number(options.defaultAllowFeed) || 0),
+};
+const lastLogin = user!.logged && user!.logged > 0
+  ? formatDate(user!.logged, 'Y-m-d H:i', Number(options.timezone) || 0)
+  : null;
+const profileBottomHtml = await applyFilterSafely(ctx, 'admin:profile:bottom', '', {
+  options,
+  user,
+  writingPreferences,
+});
+---
+<Admin title="个人设置" options={options} urls={urls} user={user} activeMenu="profile" pluginCtx={ctx}>
+  <div class="col-mb-12 col-tb-3">
+    <p>
+      <a href="https://gravatar.com/emails/" title="在 Gravatar 上修改头像">
+        <img class="profile-avatar" src={gravatarUrl} alt={user!.screenName || user!.name || ''} />
+      </a>
+    </p>
+    <h2>{user!.screenName || user!.name}</h2>
+    <p>{user!.name}</p>
+    <p>
+      目前有 <em>{postCount[0]?.count || 0}</em> 篇日志, 并有 <em>{commentCount[0]?.count || 0}</em>
+      条关于你的评论在 <em>{catCount[0]?.count || 0}</em> 个分类中.
+    </p>
+    {lastLogin && <p>最后登录: {lastLogin}</p>}
+  </div>
+
+  <div class="col-mb-12 col-tb-6 col-tb-offset-1 typecho-content-panel" role="form">
+    <section>
+      <h3>个人资料</h3>
+      <form method="post" action="/api/admin/profile">
+        <input type="hidden" name="_" value={csrfToken} />
+        <ul class="typecho-option" id="typecho-option-item-screenName-0">
+          <li>
+            <label class="typecho-label" for="screenName-0-1">昵称</label>
+            <input type="text" id="screenName-0-1" name="screenName" class="text" value={user!.screenName || ''} />
+            <p class="description">用户昵称可以与用户名不同, 用于前台显示.<br />如果你将此项留空, 将默认使用用户名.</p>
+          </li>
+        </ul>
+        <ul class="typecho-option" id="typecho-option-item-url-1">
+          <li>
+            <label class="typecho-label" for="url-0-2">个人主页地址</label>
+            <input type="url" id="url-0-2" name="url" class="text" value={user!.url || ''} />
+            <p class="description">此用户的个人主页地址, 请用 <code>https://</code> 开头.</p>
+          </li>
+        </ul>
+        <ul class="typecho-option" id="typecho-option-item-mail-2">
+          <li>
+            <label class="typecho-label" for="mail-0-3">邮件地址 *</label>
+            <input type="text" id="mail-0-3" name="mail" class="text" value={user!.mail || ''} />
+            <p class="description">电子邮箱地址将作为此用户的主要联系方式.<br />请不要与系统中现有的电子邮箱地址重复.</p>
+          </li>
+        </ul>
+        <ul class="typecho-option" id="typecho-option-item-do-3" style="display:none">
+          <li><input type="hidden" id="do-0-4" name="do" value="profile" /></li>
+        </ul>
+        <ul class="typecho-option typecho-option-submit" id="typecho-option-item-submit-4">
+          <li>
+            <button type="submit" class="btn primary">更新我的档案</button>
+          </li>
+        </ul>
+      </form>
+    </section>
+
+    <br />
+
+    {isContributor && (
+      <>
+        <section id="writing-option">
+          <h3>撰写设置</h3>
+          <form method="post" action="/api/admin/profile">
+            <input type="hidden" name="_" value={csrfToken} />
+            <ul class="typecho-option" id="typecho-option-item-markdown-5">
+              <li>
+                <label class="typecho-label">使用 Markdown 语法编辑和解析内容</label>
+                <span><input type="radio" name="markdown" value="0" id="markdown-0" checked={!writingPreferences.markdown} /><label for="markdown-0">关闭</label></span>
+                <span><input type="radio" name="markdown" value="1" id="markdown-1" checked={writingPreferences.markdown} /><label for="markdown-1">打开</label></span>
+                <p class="description">使用 <a href="https://daringfireball.net/projects/markdown/">Markdown</a> 语法能够使您的撰写过程更加简便直观.<br />此功能开启不会影响以前没有使用 Markdown 语法编辑的内容.</p>
+              </li>
+            </ul>
+            <ul class="typecho-option" id="typecho-option-item-autoSave-6">
+              <li>
+                <label class="typecho-label">自动保存</label>
+                <span><input type="radio" name="autoSave" value="0" id="autoSave-0" checked={!writingPreferences.autoSave} /><label for="autoSave-0">关闭</label></span>
+                <span><input type="radio" name="autoSave" value="1" id="autoSave-1" checked={writingPreferences.autoSave} /><label for="autoSave-1">打开</label></span>
+                <p class="description">自动保存功能可以更好地保护你的文章不会丢失.</p>
+              </li>
+            </ul>
+            <ul class="typecho-option" id="typecho-option-item-defaultAllow-7">
+              <li>
+                <label class="typecho-label">默认允许</label>
+                <span><input type="checkbox" name="defaultAllow[]" value="comment" id="defaultAllow-comment" checked={writingPreferences.defaultAllowComment} /><label for="defaultAllow-comment">可以被评论</label></span>
+                <span><input type="checkbox" name="defaultAllow[]" value="feed" id="defaultAllow-feed" checked={writingPreferences.defaultAllowFeed} /><label for="defaultAllow-feed">出现在聚合中</label></span>
+                <p class="description">设置你经常使用的默认允许权限</p>
+              </li>
+            </ul>
+            <ul class="typecho-option" id="typecho-option-item-do-8" style="display:none">
+              <li><input type="hidden" id="do-0-9" name="do" value="options" /></li>
+            </ul>
+            <ul class="typecho-option typecho-option-submit" id="typecho-option-item-submit-9">
+              <li><button type="submit" class="btn primary">保存设置</button></li>
+            </ul>
+          </form>
+        </section>
+
+        <br />
+      </>
+    )}
+
+    <section id="passkeys">
+      <h3>通行密钥</h3>
+      <p class="description">
+        通行密钥（Passkey）可用指纹、面容或本机安全密钥登录后台，密码登录仍然可用。
+        需在 HTTPS 或 localhost 下使用。
+      </p>
+      <ul class="typecho-option" id="typecho-option-item-passkey-list-14">
+        <li>
+          <label class="typecho-label">已注册的通行密钥</label>
+          <div id="passkey-list" class="passkey-list" data-csrf={csrfToken}>加载中…</div>
+        </li>
+      </ul>
+      <ul class="typecho-option" id="typecho-option-item-passkey-name-15">
+        <li>
+          <label class="typecho-label" for="passkey-name">名称（可选）</label>
+          <input type="text" id="passkey-name" class="text w-60" maxlength="64" placeholder="例如：本机 MacBook" autocomplete="off" />
+          <p class="description">便于区分多把密钥；留空则使用默认名称。</p>
+        </li>
+      </ul>
+      <ul class="typecho-option typecho-option-submit" id="typecho-option-item-passkey-submit-16">
+        <li>
+          <button type="button" class="btn primary" id="passkey-register">添加通行密钥</button>
+          <span id="passkey-status" class="description" style="margin-left:8px"></span>
+        </li>
+      </ul>
+    </section>
+
+    <br />
+
+    <section id="change-password">
+      <h3>密码修改</h3>
+      <form method="post" action="/api/admin/profile">
+        <input type="hidden" name="_" value={csrfToken} />
+        <ul class="typecho-option" id="typecho-option-item-password-10">
+          <li>
+            <label class="typecho-label" for="password-0-11">用户密码</label>
+            <input type="password" id="password-0-11" name="password" class="w-60" autocomplete="new-password" />
+            <p class="description">为此用户分配一个密码.<br />建议使用特殊字符与字母、数字的混编样式,以增加系统安全性.</p>
+          </li>
+        </ul>
+        <ul class="typecho-option" id="typecho-option-item-confirm-11">
+          <li>
+            <label class="typecho-label" for="confirm-0-12">用户密码确认</label>
+            <input type="password" id="confirm-0-12" name="passwordConfirm" class="w-60" autocomplete="new-password" />
+            <p class="description">请确认你的密码, 与上面输入的密码保持一致.</p>
+          </li>
+        </ul>
+        <ul class="typecho-option" id="typecho-option-item-do-12" style="display:none">
+          <li><input type="hidden" id="do-0-13" name="do" value="password" /></li>
+        </ul>
+        <ul class="typecho-option typecho-option-submit" id="typecho-option-item-submit-13">
+          <li>
+            <button type="submit" class="btn primary">更新密码</button>
+          </li>
+        </ul>
+      </form>
+    </section>
+
+    {profileBottomHtml && <Fragment set:html={profileBottomHtml} />}
+  </div>
+</Admin>
+
+<script is:inline>
+(function () {
+  var listEl = document.getElementById('passkey-list');
+  var statusEl = document.getElementById('passkey-status');
+  var registerBtn = document.getElementById('passkey-register');
+  var nameInput = document.getElementById('passkey-name');
+  if (!listEl || !registerBtn) return;
+
+  var csrf = listEl.getAttribute('data-csrf') || '';
+
+  function setStatus(msg, isError) {
+    if (!statusEl) return;
+    statusEl.textContent = msg || '';
+    statusEl.style.color = isError ? '#B94A48' : '';
+  }
+
+  function b64urlToBuffer(value) {
+    var padded = value.replace(/-/g, '+').replace(/_/g, '/');
+    while (padded.length % 4) padded += '=';
+    var binary = atob(padded);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+  }
+
+  function bufferToB64url(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var binary = '';
+    for (var i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  function prepCreateOptions(options) {
+    var pub = Object.assign({}, options);
+    pub.challenge = b64urlToBuffer(options.challenge);
+    pub.user = Object.assign({}, options.user, { id: b64urlToBuffer(options.user.id) });
+    if (options.excludeCredentials) {
+      pub.excludeCredentials = options.excludeCredentials.map(function (c) {
+        return Object.assign({}, c, { id: b64urlToBuffer(c.id) });
+      });
+    }
+    return pub;
+  }
+
+  function credentialToJSON(cred) {
+    var response = cred.response;
+    return {
+      id: cred.id,
+      rawId: bufferToB64url(cred.rawId),
+      type: cred.type,
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+      response: {
+        clientDataJSON: bufferToB64url(response.clientDataJSON),
+        attestationObject: bufferToB64url(response.attestationObject),
+        transports: response.getTransports ? response.getTransports() : undefined,
+      },
+    };
+  }
+
+  function formatTime(ts) {
+    if (!ts) return '—';
+    var d = new Date(ts * 1000);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString();
+  }
+
+  function renderList(credentials) {
+    if (!credentials.length) {
+      listEl.innerHTML = '<p class="description" style="margin:0">尚未注册通行密钥。</p>';
+      return;
+    }
+    listEl.innerHTML = '';
+    var ul = document.createElement('ul');
+    ul.style.cssText = 'list-style:none;margin:0;padding:0';
+    credentials.forEach(function (item) {
+      var li = document.createElement('li');
+      li.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid #E9E9E6';
+      var meta = document.createElement('span');
+      var strong = document.createElement('strong');
+      strong.textContent = item.name || '通行密钥';
+      var small = document.createElement('small');
+      small.className = 'description';
+      small.textContent = '创建于 ' + formatTime(item.createdAt) + ' · 最近使用 ' + formatTime(item.lastUsedAt);
+      meta.appendChild(strong);
+      meta.appendChild(document.createElement('br'));
+      meta.appendChild(small);
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'btn btn-xs passkey-delete';
+      del.setAttribute('data-id', String(item.id));
+      del.textContent = '删除';
+      li.appendChild(meta);
+      li.appendChild(del);
+      ul.appendChild(li);
+    });
+    listEl.appendChild(ul);
+  }
+
+  async function loadList() {
+    try {
+      var res = await fetch('/api/admin/passkey', { credentials: 'same-origin' });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || '加载失败');
+      renderList(data.credentials || []);
+    } catch (err) {
+      listEl.textContent = err.message || '加载失败';
+    }
+  }
+
+  listEl.addEventListener('click', async function (event) {
+    var target = event.target;
+    if (!(target instanceof HTMLElement) || !target.classList.contains('passkey-delete')) return;
+    var id = target.getAttribute('data-id');
+    if (!id || !confirm('确认删除这把通行密钥？')) return;
+    setStatus('正在删除…');
+    try {
+      var res = await fetch('/api/admin/passkey?id=' + encodeURIComponent(id), {
+        method: 'DELETE',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrf },
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || '删除失败');
+      setStatus('已删除');
+      await loadList();
+    } catch (err) {
+      setStatus(err.message || '删除失败', true);
+    }
+  });
+
+  registerBtn.addEventListener('click', async function () {
+    if (!window.PublicKeyCredential) {
+      setStatus('当前浏览器不支持通行密钥', true);
+      return;
+    }
+    registerBtn.disabled = true;
+    setStatus('等待验证器…');
+    try {
+      var optRes = await fetch('/api/admin/passkey/register-options', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      var optData = await optRes.json();
+      if (!optRes.ok) throw new Error(optData.error || '无法开始注册');
+
+      var credential = await navigator.credentials.create({
+        publicKey: prepCreateOptions(optData.options),
+      });
+      if (!credential) throw new Error('未完成通行密钥创建');
+
+      var regRes = await fetch('/api/admin/passkey/register', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrf, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeToken: optData.challengeToken,
+          response: credentialToJSON(credential),
+          name: nameInput ? nameInput.value : '',
+        }),
+      });
+      var regData = await regRes.json();
+      if (!regRes.ok) throw new Error(regData.error || '注册失败');
+      if (nameInput) nameInput.value = '';
+      setStatus('通行密钥已添加');
+      await loadList();
+    } catch (err) {
+      var msg = err && err.name === 'NotAllowedError' ? '已取消或被浏览器拒绝' : (err.message || '注册失败');
+      setStatus(msg, true);
+    } finally {
+      registerBtn.disabled = false;
+    }
+  });
+
+  loadList();
+})();
+</script>
