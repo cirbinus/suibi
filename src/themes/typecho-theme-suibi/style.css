@@ -223,8 +223,11 @@ body.suibi-theme {
   transition: background-color 180ms ease;
 }
 
-.suibi-stream-item:hover {
-  background: var(--suibi-hover);
+/* 悬停底色只在真有指针悬停的设备生效：触屏点按后 :hover 会一直粘住。 */
+@media (hover: hover) and (pointer: fine) {
+  .suibi-stream-item:hover {
+    background: var(--suibi-hover);
+  }
 }
 
 .suibi-stream-item__hit {
@@ -253,7 +256,10 @@ body.suibi-theme {
   color: var(--suibi-border);
 }
 
-.suibi-item-badge {
+/* 显式继承颜色：否则 Safari 会把访问过的分类链接染成默认蓝。 */
+.suibi-item-badge,
+.suibi-item-time {
+  color: inherit;
   letter-spacing: .04em;
   transition: color 180ms ease;
 }
@@ -1560,6 +1566,11 @@ body.suibi-theme {
     margin-top: 48px;
   }
 
+  /* 首页顶部间距 = 条目上内边距，使顶栏到正文与条目之间等距。 */
+  .suibi-main--home {
+    margin-top: 20px;
+  }
+
   .suibi-item-title {
     font-size: 1.24rem;
   }
@@ -1646,10 +1657,9 @@ body.suibi-theme {
 }
 
 
-/* Suibi's compact essay rhythm: whitespace rather than cards, rules or raised surfaces. */
-.suibi-header__inner {
-  padding-bottom: 18px;
-}
+/* Suibi's compact essay rhythm: whitespace rather than cards, rules or raised
+   surfaces. No padding under the header — the top gap of the first entry is the
+   only thing separating it, so the rhythm stays even down the whole column. */
 .suibi-main--detail,
 .suibi-article,
 .suibi-page,
@@ -1689,6 +1699,8 @@ body.suibi-theme {
   .suibi-nav { justify-content: flex-start; gap: 2px; }
   .suibi-nav__link { padding-inline: 7px; }
   .suibi-main { margin-top: 36px; }
+  /* 同上：手机端让首页顶部与条目间距完全一致。 */
+  .suibi-main--home { margin-top: 20px; }
   .suibi-stream-item { padding-block: 20px; }
   .suibi-item-title { font-size: 1.2rem; }
   .suibi-stream-item--essay .suibi-item-body { font-size: 15px; }

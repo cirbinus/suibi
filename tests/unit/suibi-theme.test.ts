@@ -157,5 +157,13 @@ describe('typecho-theme-suibi', () => {
     const headerBlocks = [...css.matchAll(/\.suibi-header[^{}]*\{[^}]*\}/g)].map(m => m[0]);
     expect(headerBlocks.length).toBeGreaterThan(0);
     expect(headerBlocks.some(block => block.includes('border'))).toBe(false);
+    expect(headerBlocks.some(block => block.includes('padding-bottom'))).toBe(false);
+
+    // Even vertical rhythm: the gap above the first entry equals the entry
+    // padding, so the header→content gap is the same as entry→entry.
+    expect(css).toContain('.suibi-main--home { margin-top: 20px; }');
+    expect(css).toContain('.suibi-stream-item { padding-block: 20px; }');
+    // Touch devices must not keep a stuck hover band after a tap.
+    expect(css).toContain('@media (hover: hover) and (pointer: fine)');
   });
 });
