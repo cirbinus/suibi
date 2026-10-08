@@ -13,6 +13,7 @@ import { parseTrackbackUrls, sendTrackbacks, TrackbackInputError } from '@/lib/t
 import { eq, and, sql } from 'drizzle-orm';
 import { parseBoundedIds, sqlInChunks } from '@/lib/d1-in';
 import { SLUG_RESOLVE_MAX_SUFFIX } from '@/lib/constants';
+import { extractInlineHashtagNames } from '@/lib/inline-hashtags';
 
 // Typecho convention: visibility dropdown maps to db status column.
 // 'password' visibility stores the password in a separate column, status falls back to 'publish'.
@@ -94,7 +95,12 @@ function buildCustomFieldStatements(db: any, cid: number, formData: FormData): a
 }
 
 function parseTagNames(tags: string): string[] {
-  return [...new Set(tags.split(',').map((t) => t.trim()).filter(Boolean))];
+  return [...new Set(
+    tags
+      .split(/[,，]+/u)
+      .map((tag) => tag.trim().replace(/^#+/u, ''))
+      .filter(Boolean),
+  )];
 }
 
 function trackbackExcerpt(text: string): string {
@@ -106,8 +112,8 @@ function trackbackExcerpt(text: string): string {
     .slice(0, 255);
 }
 
-async function attachTags(db: any, cid: number, tags: string) {
-  for (const tagName of parseTagNames(tags)) {
+async function attachTags(db: any, cid: number, tagNames: string[]) {
+  for (const tagName of tagNames) {
     const tagSlug = generateSlug(tagName) || tagName.toLowerCase().replace(/\s+/g, '-');
     let tagRow = await db.query.metas.findFirst({
       where: and(eq(schema.metas.slug, tagSlug), eq(schema.metas.type, 'tag')),
@@ -380,7 +386,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const password = formData.get('password')?.toString()?.trim() || null;
   const allowComment = formData.get('allowComment') ? '1' : '0';
   const allowFeed = formData.get('allowFeed') ? '1' : '0';
-  const tags = formData.get('tags')?.toString()?.trim() || '';
+  const submittedTags = formData.get('tags')?.toString()?.trim() || '';
+  const tagNames = [...new Set([
+    ...parseTagNames(submittedTags),
+    ...extractInlineHashtagNames(text),
+  ])];
   const parsedCategoryIds = parseBoundedIds(formData.getAll('category[]'));
   if (parsedCategoryIds === null) return new Response('分类 ID 数据无效或超过 200 项', { status: 400 });
   const categoryIds = parsedCategoryIds;
@@ -585,8 +595,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     await db.batch(createStatements as [any, ...any[]]);
 
     // Add tags
-    if (tags) {
-      await attachTags(db, newCid, tags);
+    if (tagNames.length > 0) {
+      await attachTags(db, newCid, tagNames);
     }
 
     // Trigger post/page finish hooks (extra matches feedback:finishComment shape)
@@ -711,8 +721,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const finalSlug = await claimUniqueSlug(db, cid, desiredSlug);
 
     // Add tags
-    if (tags) {
-      await attachTags(db, cid, tags);
+    if (tagNames.length > 0) {
+      await attachTags(db, cid, tagNames);
     }
 
     // Trigger post/page finish hooks (create path already does this; update was missing)

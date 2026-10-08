@@ -78,6 +78,17 @@ describe('typecho-theme-suibi', () => {
     expect(note).toContain('plainExcerpt');
   });
 
+  it('renders body hashtags as clickable links instead of separate card metadata', () => {
+    const pageData = readFileSync(join(process.cwd(), 'src/lib/page-data.ts'), 'utf8');
+    const dispatcher = read('components/SuibiStreamItem.astro');
+    const post = read('components/Post.astro');
+
+    expect(pageData).toContain('linkifyInlineHashtags(');
+    expect(pageData).toContain("eq(schema.metas.type, 'tag')");
+    expect(dispatcher).not.toContain('post.tags.map');
+    expect(post).not.toContain('suibi-article__footer');
+  });
+
   it('never renders the placeholder title "无标题" on an essay page', () => {
     const post = read('components/Post.astro');
 

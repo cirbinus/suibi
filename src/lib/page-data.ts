@@ -28,6 +28,7 @@ import type {
 import { getActiveTheme } from '@/lib/theme';
 import { loadQueryCache } from '@/lib/query-cache';
 import { sqlInChunks } from '@/lib/d1-in';
+import { linkifyInlineHashtags } from '@/lib/inline-hashtags';
 
 const MAX_SEARCH_PATTERN_BYTES = 50;
 
@@ -64,6 +65,8 @@ type MetaRow = typeof schema.metas.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
 type CategoryEntry = { name: string; slug: string; permalink: string };
 type CategoryMap = Map<number, CategoryEntry[]>;
+type TagEntry = { name: string; slug: string; permalink: string };
+type TagMap = Map<number, TagEntry[]>;
 type AuthorEntry = { uid: number; name: string | null; screenName: string | null };
 type AuthorMap = Map<number, AuthorEntry>;
 
@@ -257,16 +260,36 @@ function mapPostCategories(
   return map;
 }
 
+function mapPostTags(
+  rows: Array<{ cid: number; mid: number; name: string | null; slug: string | null }>,
+  siteUrl: string,
+): TagMap {
+  const map: TagMap = new Map();
+  for (const row of rows) {
+    const cid = Number(row.cid);
+    if (!Number.isSafeInteger(cid)) continue;
+    if (!map.has(cid)) map.set(cid, []);
+    map.get(cid)!.push({
+      name: row.name || '',
+      slug: row.slug || '',
+      permalink: buildTagLink(row.slug || '', siteUrl),
+    });
+  }
+  return map;
+}
+
 function toPostListItem(
   post: PublicArchivePostRow,
   authorMap: AuthorMap,
   categoryMap: CategoryMap,
+  tagMap: TagMap,
   siteUrl: string,
   permalinkPattern?: string | null,
 ): PostListItem {
   const author = authorMap.get(post.authorId || 0);
   const cid = Number(post.cid);
   const categories = categoryMap.get(cid) || [];
+  const tags = tagMap.get(cid) || [];
   const permalink = buildPermalink(
     { cid: post.cid, slug: post.slug, type: post.type, created: post.created, category: categories[0]?.slug },
     siteUrl,
@@ -276,11 +299,15 @@ function toPostListItem(
     cid: post.cid,
     title: post.title || '无标题',
     permalink,
-    excerpt: renderContentExcerpt(post.text || '', '- 阅读剩余部分 -', permalink),
+    excerpt: linkifyInlineHashtags(
+      renderContentExcerpt(post.text || '', '- 阅读剩余部分 -', permalink),
+      tags,
+    ),
     created: post.created || 0,
     commentsNum: post.commentsNum || 0,
     author: author ? { uid: author.uid, name: author.name || '', screenName: author.screenName || author.name || '' } : null,
     categories,
+    tags,
   };
 }
 
@@ -391,14 +418,16 @@ async function prepareArchiveData(
 
   let authorMap = params.authorOverride;
   let categoryRows: Array<{ cid: number; mid: number; name: string | null; slug: string | null }> = [];
+  let tagRows: Array<{ cid: number; mid: number; name: string | null; slug: string | null }> = [];
   if (postIds.length > 0) {
+    const relatedMetaColumns = {
+      cid: schema.relationships.cid,
+      mid: schema.relationships.mid,
+      name: schema.metas.name,
+      slug: schema.metas.slug,
+    };
     const categoryStatement = db
-      .select({
-        cid: schema.relationships.cid,
-        mid: schema.relationships.mid,
-        name: schema.metas.name,
-        slug: schema.metas.slug,
-      })
+      .select(relatedMetaColumns)
       .from(schema.relationships)
       .innerJoin(schema.metas, eq(schema.relationships.mid, schema.metas.mid))
       .where(
@@ -407,11 +436,21 @@ async function prepareArchiveData(
           eq(schema.metas.type, 'category')
         )
       );
+    const tagStatement = db
+      .select(relatedMetaColumns)
+      .from(schema.relationships)
+      .innerJoin(schema.metas, eq(schema.relationships.mid, schema.metas.mid))
+      .where(
+        and(
+          sqlInChunks(schema.relationships.cid, postIds),
+          eq(schema.metas.type, 'tag')
+        )
+      );
 
     if (authorMap || authorIds.length === 0) {
-      categoryRows = await categoryStatement;
+      [categoryRows, tagRows] = await db.batch([categoryStatement, tagStatement]);
     } else {
-      const [authors, categories] = await db.batch([
+      const [authors, categories, tags] = await db.batch([
         db
           .select({
             uid: schema.users.uid,
@@ -421,9 +460,11 @@ async function prepareArchiveData(
           .from(schema.users)
           .where(sqlInChunks(schema.users.uid, authorIds)),
         categoryStatement,
+        tagStatement,
       ]);
       authorMap = new Map(authors.map(author => [author.uid, author]));
       categoryRows = categories;
+      tagRows = tags;
     }
   }
   authorMap ??= await fetchAuthors(db, authorIds);
@@ -432,13 +473,14 @@ async function prepareArchiveData(
     urls.siteUrl,
     options.categoryPattern as string | undefined,
   );
+  const tagMap = mapPostTags(tagRows, urls.siteUrl);
 
   return {
     ...common,
     archiveTitle: params.archiveTitle,
     archiveType: params.archiveType,
     posts: rawPosts.map(p =>
-      toPostListItem(p, authorMap, categoryMap, urls.siteUrl, options.permalinkPattern as string | undefined)
+      toPostListItem(p, authorMap, categoryMap, tagMap, urls.siteUrl, options.permalinkPattern as string | undefined)
     ),
     pagination: pg,
   };
@@ -599,7 +641,7 @@ export async function preparePostData(
   const allowComment = contentRow.allowComment === '1';
   const renderedContent = hasPassword && !passwordVerified
     ? '<p>此内容已加密，请输入密码访问。</p>'
-    : await renderMarkdownFiltered(ctx, contentRow.text || '');
+    : linkifyInlineHashtags(await renderMarkdownFiltered(ctx, contentRow.text || ''), tags);
 
   // Generate CSRF token for comment form, bound to cid so that pages
   // visited via email/RSS without a referer still validate.

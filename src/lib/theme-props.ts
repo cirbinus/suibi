@@ -45,6 +45,7 @@ export interface PostListItem {
   commentsNum: number;
   author: { uid: number; name: string; screenName: string } | null;
   categories: Array<{ name: string; slug: string; permalink: string }>;
+  tags: Array<{ name: string; slug: string; permalink: string }>;
 }
 
 // ─── Index (home page) ──────────────────────────────────────────────────

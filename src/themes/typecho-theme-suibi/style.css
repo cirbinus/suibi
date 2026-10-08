@@ -341,6 +341,18 @@ body.suibi-theme {
   margin: 0 0 .8em;
 }
 
+.suibi-theme .suibi-topic-highlight,
+.suibi-theme .suibi-topic-highlight:visited {
+  color: var(--suibi-accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.suibi-theme .suibi-topic-highlight:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .suibi-item-body img,
 .suibi-item-body video {
   max-width: 100%;

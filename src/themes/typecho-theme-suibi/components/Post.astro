@@ -10,7 +10,7 @@ import SuibiToc from './SuibiToc.astro';
 import { formatSuibiDate, plainExcerpt, prepareArticleToc, readingMinutes, suibiArticleSummary, suibiPostKind, suibiSettings } from './suibi';
 
 type Props = ThemePostProps;
-const { options, urls, pages, sidebarData, currentPath, pluginCtx, post, categories, tags, commentPagination } = Astro.props;
+const { options, urls, pages, sidebarData, currentPath, pluginCtx, post, categories, commentPagination } = Astro.props;
 const settings = suibiSettings(options);
 const db = getDb(env.DB);
 const optimizedContent = optimizeContentImages(post.content, settings.imageOptimizeParams, urls.siteUrl);
@@ -46,7 +46,6 @@ const pageTitle = isEssay ? (description || '').slice(0, 40).trim() || undefined
       <div class="suibi-prose" view-image itemprop="articleBody" set:html={toc.html} />
       {toc.items.length > 0 && <SuibiToc items={toc.items} />}
     </div>
-    {tags.length > 0 && <footer class="suibi-article__footer">{tags.map(tag => <a href={tag.permalink}>#{tag.name}</a>)}</footer>}
   </article>
   {(post.allowComment || commentPagination.totalComments > 0) && <SuibiComments cid={post.cid} componentLoadMode={settings.commentComponentLoadMode} initialLoadMode={settings.commentInitialLoadMode} cooldownSeconds={options.commentsPostIntervalEnable ? (options.commentsPostInterval || 60) : 0} />}
 </SuibiShell>

@@ -330,6 +330,30 @@ describe('POST /api/admin/content', () => {
     expect(rels).toHaveLength(1);
   });
 
+  it('extracts natural hashtags from the body into distinct persisted tags', async () => {
+    const admin = await testDb.query.users.findFirst();
+    const cookie = await makeAuthCookie(testDb, admin!.uid, TEST_AUTH_CODE, TEST_SECRET);
+    const req = await makeContentRequest({
+      do: 'create',
+      type: 'post',
+      title: 'Hashtag post',
+      text: '#生活 今天很好，#工作 也要记录。重复 #生活',
+      status: 'publish',
+      visibility: 'publish',
+      allowFeed: '1',
+    }, cookie);
+
+    const res = await POST({ request: req, locals: {} } as any);
+    expect(res.status).toBe(302);
+
+    const tags = await testDb.select().from(schema.metas).where(eq(schema.metas.type, 'tag'));
+    const rels = await testDb.select().from(schema.relationships);
+    expect(tags.map(tag => tag.name).sort()).toEqual(['工作', '生活']);
+    expect(tags.map(tag => tag.slug).sort()).toEqual(['工作', '生活']);
+    expect(tags.every(tag => tag.count === 1)).toBe(true);
+    expect(rels).toHaveLength(2);
+  });
+
   it('derives an initial slug from the title when none is supplied', async () => {
     const admin = await testDb.query.users.findFirst();
     const cookie = await makeAuthCookie(testDb, admin!.uid, TEST_AUTH_CODE, TEST_SECRET);
