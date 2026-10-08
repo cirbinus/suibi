@@ -22,8 +22,19 @@ const {
 } = Astro.props;
 Astro.response.headers.set(PUBLIC_HTML_HEADER, '1');
 const settings = suibiSettings(options);
-const categories = sidebarData.categories.slice(0, 10);
 const homeUrl = `${urls.siteUrl.replace(/\/$/, '')}/`;
+const findCategoryUrl = (slug: string) => sidebarData.categories.find(category => category.slug === slug)?.permalink || '';
+const noteUrl = findCategoryUrl(settings.noteCategory);
+const essayUrl = findCategoryUrl(settings.essayCategory);
+const isCurrentUrl = (permalink?: string) => {
+  if (!permalink) return false;
+  try {
+    const path = new URL(permalink).pathname.replace(/\/$/, '');
+    return path !== '' && currentPath.replace(/\/$/, '').startsWith(path);
+  } catch {
+    return false;
+  }
+};
 const socialLinks = [
   { label: 'RSS', href: urls.feedUrl },
   { label: 'GitHub', href: settings.githubUrl },
@@ -41,23 +52,21 @@ const socialLinks = [
       </a>
       <nav class="suibi-nav" aria-label="主导航">
         <a class:list={["suibi-nav__link", { "is-active": section === 'home' }]} href={homeUrl} aria-current={section === 'home' ? 'page' : undefined}>首页</a>
-        <details class:list={["suibi-nav__dropdown", { "is-active": section === 'archive' }]}>
-          <summary>归档 <span aria-hidden="true">⌄</span></summary>
-          <div class="suibi-nav__menu">
-            <a href={homeUrl}>全部随笔</a>
-            {categories.map(category => <a href={category.permalink}>{category.name}</a>)}
-          </div>
-        </details>
-        {pages.map(page => <a class:list={["suibi-nav__link", { "is-active": currentPath !== '/' && page.permalink.includes(currentPath) }]} href={page.permalink}>{page.title}</a>)}
+        {noteUrl && <a class:list={["suibi-nav__link", { "is-active": isCurrentUrl(noteUrl) }]} href={noteUrl}>笔记</a>}
+        {essayUrl && <a class:list={["suibi-nav__link", { "is-active": isCurrentUrl(essayUrl) }]} href={essayUrl}>随笔</a>}
+        {pages.map(page => <a class:list={["suibi-nav__link", { "is-active": isCurrentUrl(page.permalink) }]} href={page.permalink}>{page.title}</a>)}
       </nav>
     </div>
   </header>
 
   {liveRefresh && <aside class="suibi-live-refresh" data-suibi-live-refresh hidden><a href={homeUrl}>有新随笔，点击查看</a></aside>}
-  <main id="suibi-content" class:list={["suibi-main", { "suibi-main--detail": detail }]} tabindex="-1"><slot /></main>
+  <main id="suibi-content" class:list={["suibi-main", { "suibi-main--detail": detail, "suibi-main--home": section === 'home' }]} tabindex="-1"><slot /></main>
 
   <footer class="suibi-footer">
-    <div><span>© {new Date().getFullYear()} {options.title}</span><nav aria-label="页脚链接">{socialLinks.map(link => <a href={link.href}>{link.label}</a>)}</nav></div>
+    <div class="suibi-footer__meta">
+      <span>© {new Date().getFullYear()} {options.title}</span>
+      <nav aria-label="页脚链接">{socialLinks.map(link => <a href={link.href}>{link.label}</a>)}</nav>
+    </div>
   </footer>
 
   <Fragment slot="head">
@@ -68,11 +77,6 @@ const socialLinks = [
 
   <script is:inline data-no-instant>
     (() => {
-      document.addEventListener('click', event => {
-        document.querySelectorAll('.suibi-nav__dropdown[open]').forEach(dropdown => {
-          if (!dropdown.contains(event.target)) dropdown.open = false;
-        });
-      });
       const viewImageSelector = CSS.supports('selector(a:has(> img))')
         ? '[view-image] a:has(> img), [view-image] img:not(a img)'
         : '[view-image] img';

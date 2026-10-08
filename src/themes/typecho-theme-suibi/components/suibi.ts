@@ -10,6 +10,8 @@ export type SuibiSection = 'home' | 'archive' | 'about' | 'none';
 export type SuibiContinuousLoadMode = 'manual' | 'auto-2' | 'infinite';
 export type SuibiCommentComponentLoadMode = 'auto' | 'dwell' | 'manual';
 export type SuibiCommentInitialLoadMode = 'manual' | 'auto-first' | 'auto-2' | 'infinite';
+/** 长文「笔记」与碎片「随笔」共用一套内容模型，只靠分类区分。 */
+export type SuibiPostKind = 'note' | 'essay';
 
 export interface SuibiSettings {
   githubUrl: string;
@@ -22,6 +24,10 @@ export interface SuibiSettings {
   imageOptimizeParams: string;
   /** Query params appended to thumbnail URLs; falls back to imageOptimizeParams when empty. */
   thumbOptimizeParams: string;
+  /** 长文「笔记」所在分类的 slug。 */
+  noteCategory: string;
+  /** 碎片「随笔」所在分类的 slug；命中的条目不再重复显示标题。 */
+  essayCategory: string;
 }
 
 export function suibiSettings(options: ThemeBaseProps['options']): SuibiSettings {
@@ -43,7 +49,28 @@ export function suibiSettings(options: ThemeBaseProps['options']): SuibiSettings
     commentInitialLoadMode: normalizeCommentInitialLoadMode(settings.commentInitialLoadMode),
     imageOptimizeParams,
     thumbOptimizeParams: normalizeOptimizeParams(settings.thumbOptimizeParams) || imageOptimizeParams,
+    noteCategory: normalizeCategorySlug(settings.noteCategory, 'biji'),
+    essayCategory: normalizeCategorySlug(settings.essayCategory, 'suibi'),
   };
+}
+
+export function normalizeCategorySlug(value: unknown, fallback: string): string {
+  const raw = typeof value === 'string' ? value.trim().replace(/^\/+|\/+$/g, '') : '';
+  return raw || fallback;
+}
+
+/**
+ * 判定一条内容是「笔记」（长文，显示标题+摘要）还是「随笔」（碎片，正文内联、不显示标题）。
+ * 以分类为准：命中随笔分类即为随笔；无标题的条目同样按随笔处理，避免出现空标题。
+ */
+export function suibiPostKind(
+  post: { title?: string | null; categories?: Array<{ slug: string }> | null },
+  settings: Pick<SuibiSettings, 'essayCategory'>,
+): SuibiPostKind {
+  if (settings.essayCategory && (post.categories || []).some(category => category.slug === settings.essayCategory)) {
+    return 'essay';
+  }
+  return (post.title || '').trim() ? 'note' : 'essay';
 }
 
 function readSavedSuibiSettings(options: ThemeBaseProps['options']): Record<string, unknown> | null {

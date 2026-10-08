@@ -147,75 +147,26 @@ body.suibi-theme {
   line-height: 1.5;
 }
 
-.suibi-nav__link,
-.suibi-nav__dropdown > summary {
+.suibi-nav__link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   padding: 3px 10px;
   color: #77736e !important;
   white-space: nowrap;
   cursor: pointer;
-  list-style: none;
   transition: color 180ms ease, background-color 180ms ease;
 }
 
-.suibi-nav__dropdown > summary::-webkit-details-marker {
-  display: none;
-}
-
-.suibi-nav__link:hover,
-.suibi-nav__dropdown:hover > summary {
+.suibi-nav__link:hover {
   background: var(--suibi-hover);
   color: #34312e !important;
 }
 
-.suibi-nav__link.is-active,
-.suibi-nav__dropdown.is-active > summary {
+.suibi-nav__link.is-active {
   background: var(--suibi-muted);
   color: var(--suibi-surface) !important;
   font-weight: bold;
-}
-
-.suibi-nav__dropdown {
-  position: relative;
-}
-
-.suibi-nav__chevron {
-  width: 12px;
-  height: 12px;
-  color: var(--suibi-faint);
-  transition: transform 180ms ease;
-}
-
-.suibi-nav__dropdown[open] .suibi-nav__chevron {
-  transform: rotate(180deg);
-}
-
-.suibi-nav__menu {
-  position: absolute;
-  z-index: 20;
-  top: 100%;
-  left: 0;
-  display: grid;
-  width: 128px;
-  padding: 4px 0;
-  background: #f8f7f4;
-  background-clip: padding-box;
-}
-
-.suibi-nav__menu a {
-  padding: 6px 12px;
-  color: var(--suibi-muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-  transition: color 180ms ease, background-color 180ms ease;
-}
-
-.suibi-nav__menu a:hover {
-  background: #eeece7;
-  color: var(--suibi-text);
 }
 
 .suibi-main {
@@ -225,6 +176,12 @@ body.suibi-theme {
 .suibi-main--detail {
   margin-top: 56px;
 }
+
+/* 首页没有可见标题，收紧顶部留白。 */
+.suibi-main--home {
+  margin-top: 24px;
+}
+
 
 .suibi-empty h1,
 .suibi-empty h2,
@@ -290,6 +247,42 @@ body.suibi-theme {
   line-height: 1.6;
 }
 
+.suibi-item-dot {
+  color: var(--suibi-border);
+}
+
+.suibi-item-badge {
+  letter-spacing: .04em;
+  transition: color 180ms ease;
+}
+
+.suibi-item-time:hover,
+.suibi-item-badge:hover {
+  color: var(--suibi-accent);
+}
+
+/* Separators track the text column, not the full-bleed hover hit box. */
+.suibi-stream-item + .suibi-stream-item::before {
+  content: "";
+  position: absolute;
+  inset-inline: var(--suibi-gutter);
+  top: 0;
+  height: 1px;
+  background: var(--suibi-border);
+}
+
+.suibi-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .suibi-theme .suibi-category,
 .suibi-theme .suibi-private,
 .suibi-theme .suibi-note-label {
@@ -301,33 +294,64 @@ body.suibi-theme {
   color: var(--suibi-accent);
 }
 
-.suibi-post-card h2 {
+/* 笔记：长文，保留标题与摘要。 */
+.suibi-item-title {
   margin: 0;
-  font-size: 1.52rem;
+  font-size: 1.32rem;
   font-weight: 600;
-  line-height: 1.48;
-  letter-spacing: -.035em;
+  line-height: 1.5;
+  letter-spacing: -.02em;
   overflow-wrap: anywhere;
 }
 
-.suibi-post-card h2 a {
+.suibi-item-title a {
+  color: var(--suibi-text);
   transition: color 180ms ease;
 }
 
-.suibi-post-card:hover h2 a {
+.suibi-stream-item:hover .suibi-item-title a {
   color: var(--suibi-accent);
 }
 
-.suibi-post-card > p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 12px 0 0;
+.suibi-item-excerpt {
+  margin: 8px 0 0;
   color: var(--suibi-muted);
-  font-size: 16px;
-  line-height: 1.95;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  font-size: 15px;
+  line-height: 1.9;
   overflow-wrap: anywhere;
+}
+
+/* 随笔：碎片，正文内联、不重复标题。 */
+.suibi-stream-item--essay .suibi-item-body {
+  color: var(--suibi-body);
+  font-size: 15.5px;
+  line-height: 1.85;
+  overflow-wrap: anywhere;
+}
+
+.suibi-item-body > :first-child {
+  margin-top: 0;
+}
+
+.suibi-item-body > :last-child {
+  margin-bottom: 0;
+}
+
+.suibi-item-body p {
+  margin: 0 0 .8em;
+}
+
+.suibi-item-body img,
+.suibi-item-body video {
+  max-width: 100%;
+  height: auto;
+}
+
+.suibi-item-body blockquote {
+  margin: 0 0 .8em;
+  padding-left: 14px;
+  border-left: 2px solid var(--suibi-border);
+  color: var(--suibi-muted);
 }
 
 .suibi-note__content {
@@ -1481,8 +1505,8 @@ body.suibi-theme {
 }
 
 .suibi-footer {
-  margin-top: 80px;
-  padding-bottom: 48px;
+  margin-top: 56px;
+  padding-bottom: 40px;
 }
 
 .suibi-footer__meta {
@@ -1542,12 +1566,12 @@ body.suibi-theme {
     margin-top: 48px;
   }
 
-  .suibi-post-card h2 {
-    font-size: 1.38rem;
+  .suibi-item-title {
+    font-size: 1.24rem;
   }
 
-  .suibi-post-card > p {
-    font-size: 15px;
+  .suibi-item-excerpt {
+    font-size: 14.5px;
   }
 
   .suibi-note__content,
@@ -1675,8 +1699,37 @@ body.suibi-theme {
   .suibi-header { padding-top: 28px; }
   .suibi-header__inner { align-items: stretch; flex-direction: column; gap: 18px; }
   .suibi-nav { justify-content: flex-start; gap: 2px; }
-  .suibi-nav__link, .suibi-nav__dropdown > summary { padding-inline: 7px; }
+  .suibi-nav__link { padding-inline: 7px; }
   .suibi-main { margin-top: 36px; }
   .suibi-stream-item { padding-block: 20px; }
-  .suibi-post-card h2, .suibi-stream-item h2 { font-size: 1.3rem; }
+  .suibi-item-title { font-size: 1.2rem; }
+  .suibi-stream-item--essay .suibi-item-body { font-size: 15px; }
+}
+
+/* 列表收尾：只留一句安静的文字，不做按钮盒子（须写在基础分页规则之后）。 */
+.suibi-pagination--progressive {
+  margin-top: 4px;
+  min-height: 0;
+}
+
+.suibi-pagination--progressive a[data-suibi-load-more] {
+  min-width: 0;
+  height: auto;
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  color: var(--suibi-muted);
+  letter-spacing: .04em;
+  transition: color 180ms ease;
+}
+
+.suibi-pagination--progressive a[data-suibi-load-more]:hover {
+  border: 0;
+  background: transparent;
+  color: var(--suibi-accent);
+}
+
+.suibi-pagination--progressive a[data-suibi-load-more][aria-disabled="true"] {
+  color: var(--suibi-faint);
+  cursor: default;
 }

@@ -1,0 +1,14 @@
+---
+import type { PostListItem } from '@/lib/theme-props';
+import { plainExcerpt } from './suibi';
+
+interface Props {
+  post: PostListItem;
+}
+
+const { post } = Astro.props;
+const excerpt = plainExcerpt(post.excerpt);
+---
+
+<h2 class="suibi-item-title"><a href={post.permalink}>{post.title}</a></h2>
+{excerpt && <p class="suibi-item-excerpt">{excerpt}</p>}

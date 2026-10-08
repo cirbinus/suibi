@@ -1,0 +1,11 @@
+---
+import type { PostListItem } from '@/lib/theme-props';
+
+interface Props {
+  post: PostListItem;
+}
+
+const { post } = Astro.props;
+---
+
+<div class="suibi-item-body" set:html={post.excerpt} />

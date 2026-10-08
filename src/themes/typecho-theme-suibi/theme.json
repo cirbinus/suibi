@@ -1,9 +1,9 @@
 {
   "id": "typecho-theme-suibi",
   "name": "随笔",
-  "description": "克制、紧凑的中文随笔主题，所有内容统一为文章。",
+  "description": "克制、紧凑的中文随笔主题：长文「笔记」与碎片「随笔」共用一套内容模型，仅以分类区分。",
   "author": "Typecho-Workers contributors",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "stylesheet": "style.css",
   "homepage": "https://github.com/Tokinx/typecho-workers/tree/master/src/themes/typecho-theme-suibi",
   "license": "MIT",
@@ -11,6 +11,18 @@
   "publicHtml": true,
   "tags": ["minimal", "essay", "single-column"],
   "config": {
+    "noteCategory": {
+      "type": "text",
+      "label": "笔记分类别名",
+      "description": "长文所在分类的别名（slug），顶部「笔记」入口指向它。",
+      "default": "biji"
+    },
+    "essayCategory": {
+      "type": "text",
+      "label": "随笔分类别名",
+      "description": "碎片随笔所在分类的别名（slug）；命中该分类的条目不再重复显示标题。",
+      "default": "suibi"
+    },
     "githubUrl": { "type": "text", "label": "GitHub 地址", "default": "" },
     "socialUrl": { "type": "text", "label": "社交主页地址", "default": "" },
     "email": { "type": "text", "label": "联系邮箱", "default": "" },
@@ -23,7 +35,7 @@
       "description": "保留兼容配置；为空时沿用正文图片参数。", "default": ""
     },
     "continuousLoadMode": {
-      "type": "select", "label": "随笔列表加载方式", "default": "infinite",
+      "type": "select", "label": "内容列表加载方式", "default": "infinite",
       "options": { "manual": "手动加载", "auto-2": "滚动加载 2 次", "infinite": "无限滚动加载" }
     },
     "commentComponentLoadMode": {

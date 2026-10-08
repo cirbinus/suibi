@@ -24,21 +24,66 @@ describe('typecho-theme-suibi', () => {
 
   it('keeps every entry as a post and never exposes a separate notes stream', () => {
     const index = read('components/Index.astro');
-    const shell = read('components/SuibiShell.astro');
     const post = read('components/Post.astro');
 
     expect(index).not.toContain('typecho-plugin-notes');
     expect(index).not.toContain('getNotesStreamForTheme');
     expect(index).not.toContain("type: 'note'");
-    expect(index).toContain('posts.map');
     expect(index).toContain('data-suibi-stream');
-    expect(index).toContain('随笔');
-    expect(shell).not.toContain('stream=notes');
-    expect(shell).not.toContain('>文章<');
-    expect(shell).not.toContain('>笔记<');
-    expect(shell).toContain('归档');
     expect(post).not.toContain('typecho-plugin-notes');
     expect(post).toContain('itemprop="headline"');
+  });
+
+  it('offers only 首页 / 笔记 / 随笔 / 关于 in the header', () => {
+    const shell = read('components/SuibiShell.astro');
+    const manifest = JSON.parse(read('theme.json'));
+
+    expect(shell).toContain('首页');
+    expect(shell).toContain('笔记');
+    expect(shell).toContain('随笔');
+    expect(shell).not.toContain('归档');
+    expect(shell).not.toContain('suibi-nav__dropdown');
+    expect(shell).toContain('noteUrl');
+    expect(shell).toContain('essayUrl');
+
+    expect(manifest.config.noteCategory.default).toBe('biji');
+    expect(manifest.config.essayCategory.default).toBe('suibi');
+  });
+
+  it('shows the entry category as the type badge and drops essay titles', () => {
+    const dispatcher = read('components/SuibiStreamItem.astro');
+    const essay = read('components/SuibiEssayItem.astro');
+    const note = read('components/SuibiNoteItem.astro');
+    const index = read('components/Index.astro');
+    const archive = read('components/Archive.astro');
+
+    expect(index).toContain('SuibiStreamItem');
+    expect(archive).toContain('SuibiStreamItem');
+    expect(dispatcher).toContain('suibiPostKind');
+    expect(dispatcher).toContain('SuibiEssayItem');
+    expect(dispatcher).toContain('SuibiNoteItem');
+
+    // The category name is the badge on both kinds.
+    expect(dispatcher).toContain('suibi-item-badge');
+    expect(dispatcher).toContain('suibi-stream-item--${kind}');
+    expect(dispatcher).toContain('isEssay');
+
+    // Essays render the body inline and never repeat a heading.
+    expect(essay).toContain('set:html={post.excerpt}');
+    expect(essay).not.toContain('<h2');
+
+    // Notes keep a titled heading plus a plain excerpt.
+    expect(note).toContain('suibi-item-title');
+    expect(note).toContain('<h2');
+    expect(note).toContain('plainExcerpt');
+  });
+
+  it('maps categories to kinds in one place', () => {
+    const shared = read('components/suibi.ts');
+    expect(shared).toContain('export function suibiPostKind');
+    expect(shared).toContain("'essay'");
+    expect(shared).toContain('essayCategory');
+    expect(shared).toContain('noteCategory');
   });
 
   it('provides dynamic loading, fresh-content polling and instant navigation', () => {
@@ -58,7 +103,7 @@ describe('typecho-theme-suibi', () => {
     expect(shell).toContain("'[view-image] img'");
 
     const comments = read('components/SuibiComments.astro');
-    expect(comments).toContain("const onPageShow = event => {");
+    expect(comments).toContain('const onPageShow = event => {');
     expect(comments).toContain("window.removeEventListener('pageshow', onPageShow);");
     expect(pagination).toContain('class="suibi-pagination suibi-pagination--progressive"');
   });
@@ -72,5 +117,7 @@ describe('typecho-theme-suibi', () => {
     expect(css).not.toContain('box-shadow:');
     expect(css).toContain('prefers-reduced-motion');
     expect(css).toContain('border-bottom: 1px solid var(--suibi-border);');
+    expect(css).toContain('.suibi-item-badge');
+    expect(css).toContain('.suibi-stream-item--essay');
   });
 });

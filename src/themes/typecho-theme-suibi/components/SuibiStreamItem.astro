@@ -1,0 +1,31 @@
+---
+import type { PostListItem } from '@/lib/theme-props';
+import SuibiEssayItem from './SuibiEssayItem.astro';
+import SuibiNoteItem from './SuibiNoteItem.astro';
+import { formatSuibiDate, suibiPostKind, type SuibiSettings } from './suibi';
+
+interface Props {
+  post: PostListItem;
+  settings: SuibiSettings;
+  dateFormat: string | boolean;
+  timezone: number;
+}
+
+const { post, settings, dateFormat, timezone } = Astro.props;
+const kind = suibiPostKind(post, settings);
+const isEssay = kind === 'essay';
+const badge = post.categories[0];
+const stamp = formatSuibiDate(post.created, dateFormat, timezone);
+const iso = new Date(post.created * 1000).toISOString();
+---
+
+<article class:list={['suibi-stream-item', `suibi-stream-item--${kind}`]} data-suibi-cid={post.cid}>
+  <div class="suibi-item-meta">
+    {isEssay
+      ? <a class="suibi-item-time" href={post.permalink}><time datetime={iso}>{stamp}</time></a>
+      : <time datetime={iso}>{stamp}</time>}
+    {badge && <><span class="suibi-item-dot" aria-hidden="true">·</span><a class="suibi-item-badge" href={badge.permalink}>{badge.name}</a></>}
+    {isEssay && post.commentsNum > 0 && <><span class="suibi-item-dot" aria-hidden="true">·</span><a class="suibi-item-badge" href={post.permalink}>{post.commentsNum} 条回应</a></>}
+  </div>
+  {isEssay ? <SuibiEssayItem post={post} /> : <SuibiNoteItem post={post} />}
+</article>
