@@ -384,6 +384,18 @@ export const POST: APIRoute = async ({ request, locals }) => {
   const parsedCategoryIds = parseBoundedIds(formData.getAll('category[]'));
   if (parsedCategoryIds === null) return new Response('分类 ID 数据无效或超过 200 项', { status: 400 });
   const categoryIds = parsedCategoryIds;
+  if (type === 'post' && categoryIds.length > 1) {
+    const selectedCategories = await db.select({ slug: schema.metas.slug })
+      .from(schema.metas)
+      .where(and(
+        eq(schema.metas.type, 'category'),
+        sqlInChunks(schema.metas.mid, categoryIds),
+      ));
+    const selectedSlugs = new Set(selectedCategories.map((category) => category.slug));
+    if (selectedSlugs.has('suibi') && selectedSlugs.has('biji')) {
+      return new Response('随笔和笔记不能同时选择', { status: 400 });
+    }
+  }
   const template = formData.get('template')?.toString()?.trim() || null;
   const order = parseInt(formData.get('order')?.toString() || '0', 10) || 0;
   let submittedPageParent: number | undefined;

@@ -68,6 +68,35 @@ describe('POST /api/admin/content', () => {
     return events;
   }
 
+  it('rejects a post that submits both suibi and biji categories', async () => {
+    const [essay] = await testDb.insert(schema.metas).values({
+      name: '随笔', slug: 'suibi', type: 'category', count: 0,
+    }).returning();
+    const [note] = await testDb.insert(schema.metas).values({
+      name: '笔记', slug: 'biji', type: 'category', count: 0,
+    }).returning();
+    const admin = await testDb.query.users.findFirst();
+    const cookie = await makeAuthCookie(testDb, admin!.uid, TEST_AUTH_CODE, TEST_SECRET);
+    const body = new URLSearchParams([
+      ['do', 'create'], ['type', 'post'], ['title', '冲突分类'], ['text', 'Body'],
+      ['status', 'publish'], ['visibility', 'publish'],
+      ['category[]', String(essay.mid)], ['category[]', String(note.mid)],
+    ]);
+    const request = new Request('https://example.com/api/admin/content', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        cookie,
+        origin: 'https://example.com',
+      },
+      body,
+    });
+
+    const response = await POST({ request, locals: {} } as any);
+    expect(response.status).toBe(400);
+    await expect(response.text()).resolves.toBe('随笔和笔记不能同时选择');
+  });
+
   it('publishes a post into the list domains without touching detail domains', async () => {
     const events = captureInvalidations();
     const admin = await testDb.query.users.findFirst();

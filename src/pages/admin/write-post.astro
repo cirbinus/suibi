@@ -105,13 +105,26 @@ if (cidNum > 0) {
       )),
   ]);
   categories = categoryRows;
+  const essayCategory = categories.find((category) => category.slug === 'suibi');
   const defaultCategory = Number(options.defaultCategory);
-  if (categories.some(category => category.mid === defaultCategory)) {
+  if (essayCategory) {
+    postCategories = [essayCategory.mid];
+  } else if (categories.some(category => category.mid === defaultCategory)) {
     postCategories = [defaultCategory];
   }
   editorHeight = normalizeEditorHeight(editorSizeRows[0]?.value, editorHeight);
   userWritingOptionRows = writingOptionRows;
 }
+
+// 「随笔 / 笔记」是内容类型，不是可叠加标签。旧数据若同时关联，
+// 编辑器优先显示「随笔」，保存时浏览器只会提交一个单选值。
+const essayCategoryId = categories.find((category) => category.slug === 'suibi')?.mid;
+const noteCategoryId = categories.find((category) => category.slug === 'biji')?.mid;
+const selectedKindCategoryId = essayCategoryId && postCategories.includes(essayCategoryId)
+  ? essayCategoryId
+  : noteCategoryId && postCategories.includes(noteCategoryId)
+    ? noteCategoryId
+    : undefined;
 
 const userWritingOptions = new Map(userWritingOptionRows.map((option) => [option.name, option.value]));
 const userPreference = (name: string, fallback: number) => Number(userWritingOptions.get(name) ?? fallback) === 1;
@@ -275,14 +288,20 @@ const writePostBottomHtml = await applyFilterSafely(ctx, 'admin:writePost:bottom
         <section class="typecho-post-option category-option">
           <label class="typecho-label">分类</label>
           <ul>
-            {categories.map((cat) => (
-              <li>
-                <input type="checkbox" id={`category-${cat.mid}`}
-                  value={String(cat.mid)} name="category[]"
-                  checked={postCategories.includes(cat.mid)} />
-                <label for={`category-${cat.mid}`}>{cat.name}</label>
-              </li>
-            ))}
+            {categories.map((cat) => {
+              const isKindCategory = cat.slug === 'suibi' || cat.slug === 'biji';
+              const isChecked = isKindCategory
+                ? cat.mid === selectedKindCategoryId
+                : postCategories.includes(cat.mid);
+              return (
+                <li>
+                  <input type={isKindCategory ? 'radio' : 'checkbox'} id={`category-${cat.mid}`}
+                    value={String(cat.mid)} name="category[]"
+                    checked={isChecked} />
+                  <label for={`category-${cat.mid}`}>{cat.name}</label>
+                </li>
+              );
+            })}
           </ul>
         </section>
 
