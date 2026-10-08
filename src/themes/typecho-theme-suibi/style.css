@@ -1646,10 +1646,9 @@ body.suibi-theme {
 }
 
 
-/* Suibi's compact essay rhythm: separators rather than cards or raised surfaces. */
+/* Suibi's compact essay rhythm: whitespace rather than cards, rules or raised surfaces. */
 .suibi-header__inner {
   padding-bottom: 18px;
-  border-bottom: 1px solid var(--suibi-border);
 }
 .suibi-main--detail,
 .suibi-article,

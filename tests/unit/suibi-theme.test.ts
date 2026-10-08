@@ -152,5 +152,10 @@ describe('typecho-theme-suibi', () => {
     expect(css).toContain('border-bottom: 1px solid var(--suibi-border);');
     expect(css).toContain('.suibi-item-badge');
     expect(css).toContain('.suibi-stream-item--essay');
+
+    // No rule under the site title: the header separates by whitespace only.
+    const headerBlocks = [...css.matchAll(/\.suibi-header[^{}]*\{[^}]*\}/g)].map(m => m[0]);
+    expect(headerBlocks.length).toBeGreaterThan(0);
+    expect(headerBlocks.some(block => block.includes('border'))).toBe(false);
   });
 });
