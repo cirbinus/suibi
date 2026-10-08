@@ -1,4 +1,4 @@
-import { adminPostDisplayTitle } from '@/lib/admin-post-title';
+import { adminContentDisplayTitle, adminPostDisplayTitle } from '@/lib/admin-post-title';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -27,9 +27,41 @@ describe('adminPostDisplayTitle', () => {
     expect(adminPostDisplayTitle('', '')).toBe('无标题');
   });
 
+  it('exposes the same fallback for any admin content label', () => {
+    expect(adminContentDisplayTitle('', '<!--markdown-->页面正文第一句。后续内容。'))
+      .toBe('页面正文第一句。');
+  });
+
   it('wires body text into the manage-posts table fallback', () => {
     const source = readFileSync(join(process.cwd(), 'src/pages/admin/manage-posts.astro'), 'utf8');
     expect(source).toContain('text: schema.contents.text');
     expect(source).toContain('adminPostDisplayTitle(post.title, post.text)');
+  });
+
+  it('wires body-derived titles into every admin content surface that used 无标题 directly', () => {
+    const adminFiles = [
+      'src/pages/admin/index.astro',
+      'src/pages/admin/manage-pages.astro',
+      'src/pages/admin/options-reading.astro',
+      'src/pages/admin/write-page.astro',
+      'src/pages/admin/media.astro',
+    ];
+
+    for (const path of adminFiles) {
+      const source = readFileSync(join(process.cwd(), path), 'utf8');
+      expect(source, path).toContain("from '@/lib/admin-post-title'");
+      expect(source, path).not.toContain("|| '无标题'");
+    }
+
+    expect(readFileSync(join(process.cwd(), 'src/pages/admin/index.astro'), 'utf8'))
+      .toContain('adminContentDisplayTitle(post.title, post.text)');
+    expect(readFileSync(join(process.cwd(), 'src/pages/admin/manage-pages.astro'), 'utf8'))
+      .toContain('text: schema.contents.text');
+    expect(readFileSync(join(process.cwd(), 'src/pages/admin/options-reading.astro'), 'utf8'))
+      .toContain('text: schema.contents.text');
+    expect(readFileSync(join(process.cwd(), 'src/pages/admin/write-page.astro'), 'utf8'))
+      .toContain('adminContentDisplayTitle(row.title, row.text)');
+    expect(readFileSync(join(process.cwd(), 'src/pages/admin/media.astro'), 'utf8'))
+      .toContain('adminContentDisplayTitle(parentContent.title, parentContent.text)');
   });
 });

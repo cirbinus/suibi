@@ -4,6 +4,7 @@ import { createContext, requireAuth } from '@/lib/context';
 import { hasPermission } from '@/lib/auth';
 import { and, eq, lt } from 'drizzle-orm';
 import { schema } from '@/db';
+import { adminContentDisplayTitle } from '@/lib/admin-post-title';
 
 const ctx = await createContext(Astro.locals, Astro.request);
 const authCheck = requireAuth(ctx);
@@ -17,7 +18,7 @@ const { db, options, urls, user, csrfToken } = ctx;
 const frontPageSetting = String(options.frontPage || 'recent');
 const frontPageParts = frontPageSetting.split(':');
 const selectedFrontPageCid = frontPageParts[0] === 'page' ? Number(frontPageParts[1]) : 0;
-const frontPageRows = await db.select({ cid: schema.contents.cid, title: schema.contents.title })
+const frontPageRows = await db.select({ cid: schema.contents.cid, title: schema.contents.title, text: schema.contents.text })
   .from(schema.contents)
   .where(and(
     eq(schema.contents.type, 'page'),
@@ -52,7 +53,7 @@ const frontPageType = hasSelectedFrontPage ? 'page' : 'recent';
               <label for="frontPage-page">使用</label>
               <select name="frontPagePage" id="frontPage-frontPagePage">
                 {frontPageRows.map((page) => (
-                  <option value={String(page.cid)} selected={page.cid === selectedFrontPageCid}>{page.title || '无标题'}</option>
+                  <option value={String(page.cid)} selected={page.cid === selectedFrontPageCid}>{adminContentDisplayTitle(page.title, page.text)}</option>
                 ))}
               </select>
               <label for="frontPage-frontPagePage">页面作为首页</label>

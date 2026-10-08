@@ -6,6 +6,7 @@ import { eq, sql, desc } from 'drizzle-orm';
 import { schema } from '@/db';
 import { formatDate, buildPermalink } from '@/lib/content';
 import { loadQueryCache } from '@/lib/query-cache';
+import { adminContentDisplayTitle } from '@/lib/admin-post-title';
 
 const ctx = await createContext(Astro.locals, Astro.request);
 const authCheck = requireAuth(ctx);
@@ -34,6 +35,7 @@ if (keywords) {
 const pageColumns = {
   cid: schema.contents.cid,
   title: schema.contents.title,
+  text: schema.contents.text,
   slug: schema.contents.slug,
   type: schema.contents.type,
   status: schema.contents.status,
@@ -61,11 +63,11 @@ const loadPageList = async () => {
       .where(sql`${schema.contents.type} IN ('page', 'page_draft')`)
       .groupBy(schema.contents.parent),
     parentId > 0
-      ? db.select({ cid: schema.contents.cid, title: schema.contents.title, parent: schema.contents.parent })
+      ? db.select({ cid: schema.contents.cid, title: schema.contents.title, text: schema.contents.text, parent: schema.contents.parent })
         .from(schema.contents)
         .where(sql`${schema.contents.cid} = ${parentId} AND ${schema.contents.type} IN ('page', 'page_draft')`)
         .limit(1)
-      : db.select({ cid: schema.contents.cid, title: schema.contents.title, parent: schema.contents.parent })
+      : db.select({ cid: schema.contents.cid, title: schema.contents.title, text: schema.contents.text, parent: schema.contents.parent })
         .from(schema.contents)
         .where(sql`1 = 0`),
   ]);
@@ -76,7 +78,7 @@ const pageListData = keywords
   : await loadQueryCache(ctx, {
     domain: 'admin-content',
     scope: 'viewer',
-    key: { view: 'pages', parent: parentId },
+    key: { view: 'pages', parent: parentId, displayTitle: 'body-v1' },
   }, loadPageList);
 const { pageRows, childCountRows, parentPage } = pageListData;
 const pages = pageRows.map(row => row.content);
@@ -84,7 +86,7 @@ const childCounts = new Map(childCountRows.map(row => [Number(row.parent) || 0, 
 if (parentId > 0 && !parentPage) {
   return new Response('页面不存在', { status: 404 });
 }
-const pageListTitle = parentPage ? `管理 ${parentPage.title || '无标题'} 的子页面` : '管理独立页面';
+const pageListTitle = parentPage ? `管理 ${adminContentDisplayTitle(parentPage.title, parentPage.text)} 的子页面` : '管理独立页面';
 const parentBackHref = parentPage?.parent
   ? `/admin/manage-pages?parent=${parentPage.parent}`
   : '/admin/manage-pages';
@@ -157,6 +159,7 @@ const authorMap = new Map(pageRows
                 const author = authorMap.get(pg.authorId || 0);
                 const isDraft = pg.type === 'page_draft';
                 const childCount = childCounts.get(pg.cid) || 0;
+                const displayTitle = adminContentDisplayTitle(pg.title, pg.text);
                 return (
                   <tr id={`${pg.type}-${pg.cid}`}>
                     <td class="kit-hidden-mb"><input type="checkbox" value={String(pg.cid)} name="cid[]" /></td>
@@ -166,13 +169,13 @@ const authorMap = new Map(pageRows
                         title={`${pg.commentsNum || 0} 评论`}>{pg.commentsNum || 0}</a>
                     </td>
                     <td>
-                      <a href={`/admin/write-page?cid=${pg.cid}`}>{pg.title || '无标题'}</a>
+                      <a href={`/admin/write-page?cid=${pg.cid}`}>{displayTitle}</a>
                       {isDraft && <em class="status">草稿</em>}
                       {pg.status === 'hidden' && <em class="status">隐藏</em>}
-                      <a href={`/admin/write-page?cid=${pg.cid}`} title={`编辑 ${pg.title}`}><i class="i-edit"></i></a>
+                      <a href={`/admin/write-page?cid=${pg.cid}`} title={`编辑 ${displayTitle}`}><i class="i-edit"></i></a>
                       {!isDraft && (
                         <a href={buildPermalink({ cid: pg.cid, slug: pg.slug, type: pg.type, created: pg.created }, urls.siteUrl, undefined, options.pagePattern as string | undefined)}
-                          title={`浏览 ${pg.title}`}><i class="i-exlink"></i></a>
+                          title={`浏览 ${displayTitle}`}><i class="i-exlink"></i></a>
                       )}
                     </td>
                     <td>

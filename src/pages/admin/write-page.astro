@@ -8,6 +8,7 @@ import { formatDate } from '@/lib/content';
 import { renderPermalinkPattern } from '@/lib/permalink-pattern';
 import { applyFilterSafely } from '@/lib/plugin';
 import { themeTemplates } from 'virtual:theme-templates';
+import { adminContentDisplayTitle } from '@/lib/admin-post-title';
 
 const ctx = await createContext(Astro.locals, Astro.request);
 const authCheck = requireAuth(ctx);
@@ -56,7 +57,7 @@ function buildParentPageOptions(rows: ContentRow[], currentCid: number): ParentP
     for (const row of children.get(parent) || []) {
       if (visited.has(row.cid)) continue;
       visited.add(row.cid);
-      if (!excluded.has(row.cid)) options.push({ cid: row.cid, title: row.title || '无标题', depth });
+      if (!excluded.has(row.cid)) options.push({ cid: row.cid, title: adminContentDisplayTitle(row.title, row.text), depth });
       appendChildren(row.cid, depth + 1);
     }
   };
@@ -179,7 +180,7 @@ const requestedParent = !isEdit && initialParentId > 0
 const pageEditorTitle = isEdit
   ? '编辑页面'
   : requestedParent
-    ? `新增 ${requestedParent.title || '无标题'} 的子页面`
+    ? `新增 ${adminContentDisplayTitle(requestedParent.title, requestedParent.text)} 的子页面`
     : '创建新页面';
 const activeTheme = options.theme || 'typecho-theme-warm';
 const pageTemplateOptions = Object.entries(themeTemplates[activeTheme]?.PageTemplates ?? {});

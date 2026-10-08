@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
 import { schema } from '@/db';
 import { formatDate } from '@/lib/content';
+import { adminContentDisplayTitle } from '@/lib/admin-post-title';
 
 const ctx = await createContext(Astro.locals, Astro.request);
 const authCheck = requireAuth(ctx);
@@ -109,7 +110,7 @@ function formatBytes(bytes: number): string {
       {parentContent && (
         <li>
           <span class="typecho-label">所属内容</span>
-          <p><a href={`/admin/write-post?cid=${parentContent.cid}`}>{parentContent.title || '无标题'}</a></p>
+          <p><a href={`/admin/write-post?cid=${parentContent.cid}`}>{adminContentDisplayTitle(parentContent.title, parentContent.text)}</a></p>
         </li>
       )}
     </ul>

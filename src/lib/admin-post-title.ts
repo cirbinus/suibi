@@ -15,12 +15,12 @@ function decodeCommonEntities(value: string): string {
 }
 
 /**
- * Label used by the article-management table.
+ * Label used by admin content lists and selectors.
  *
  * Untitled fragments use their first sentence. The visible fallback keeps at
  * most 15 Unicode characters, followed by a single ellipsis when truncated.
  */
-export function adminPostDisplayTitle(
+export function adminContentDisplayTitle(
   title: string | null | undefined,
   text: string | null | undefined,
 ): string {
@@ -41,3 +41,5 @@ export function adminPostDisplayTitle(
     ? `${characters.slice(0, 15).join('')}…`
     : firstSentence;
 }
+
+export const adminPostDisplayTitle = adminContentDisplayTitle;
