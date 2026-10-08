@@ -17,13 +17,14 @@ const isEssay = kind === 'essay';
 const badge = post.categories[0];
 const stamp = formatSuibiDate(post.created, dateFormat, timezone);
 const iso = new Date(post.created * 1000).toISOString();
+const hitLabel = isEssay ? '查看这则随笔' : `阅读：${post.title}`;
 ---
 
 <article class:list={['suibi-stream-item', `suibi-stream-item--${kind}`]} data-suibi-cid={post.cid}>
+  {/* 整块可点：透明命中层铺满卡片，内部链接再抬到上层，避免只有标题才能点进去。 */}
+  <a class="suibi-stream-item__hit" href={post.permalink} aria-label={hitLabel}></a>
   <div class="suibi-item-meta">
-    {isEssay
-      ? <a class="suibi-item-time" href={post.permalink}><time datetime={iso}>{stamp}</time></a>
-      : <time datetime={iso}>{stamp}</time>}
+    <time datetime={iso}>{stamp}</time>
     {badge && <><span class="suibi-item-dot" aria-hidden="true">·</span><a class="suibi-item-badge" href={badge.permalink}>{badge.name}</a></>}
     {isEssay && post.commentsNum > 0 && <><span class="suibi-item-dot" aria-hidden="true">·</span><a class="suibi-item-badge" href={post.permalink}>{post.commentsNum} 条回应</a></>}
   </div>

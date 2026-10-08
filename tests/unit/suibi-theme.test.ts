@@ -108,6 +108,27 @@ describe('typecho-theme-suibi', () => {
     expect(pagination).toContain('class="suibi-pagination suibi-pagination--progressive"');
   });
 
+  it('makes the whole card clickable like a region hit, not just the title', () => {
+    const dispatcher = read('components/SuibiStreamItem.astro');
+    const warm = readFileSync(join(process.cwd(), 'src/themes/typecho-theme-warm/components/Index.astro'), 'utf8');
+    const css = read('style.css');
+
+    // One transparent hit layer per card, rendered first so it sits underneath.
+    expect(dispatcher).toContain('class="suibi-stream-item__hit"');
+    expect(dispatcher).toContain('href={post.permalink}');
+    expect(dispatcher).toContain('aria-label={hitLabel}');
+    expect(dispatcher.indexOf('suibi-stream-item__hit')).toBeLessThan(dispatcher.indexOf('suibi-item-meta'));
+    // Same mechanism as the reference warm theme (biji.io).
+    expect(warm).toContain('warm-stream-item__hit');
+
+    // Hit layer covers the card; real links inside stay above it.
+    expect(css).toContain('.suibi-stream-item__hit {');
+    expect(css).toContain('inset: 0;');
+    expect(css).toContain('a:not(.suibi-stream-item__hit)');
+    // Hover paints the clickable region so the affordance is visible.
+    expect(css).toContain('.suibi-stream-item:hover { background: var(--suibi-hover); }');
+  });
+
   it('uses a compact, borderless, responsive reading layout', () => {
     const css = read('style.css');
     expect(css).toContain('--suibi-page-width: 780px;');

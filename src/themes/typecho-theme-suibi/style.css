@@ -1671,11 +1671,13 @@ body.suibi-theme {
 .suibi-stream-heading h1 { margin: 0; font-size: 1.15rem; color: var(--suibi-accent); }
 .suibi-stream-heading p { margin: 4px 0 0; color: var(--suibi-muted); font-size: .82rem; }
 .suibi-stream-item {
-  margin-inline: 0;
-  padding: 24px 0;
-  border-bottom: 1px solid var(--suibi-border);
+  margin-inline: -12px;
+  padding: 24px 12px;
 }
-.suibi-stream-item:hover { background: transparent; }
+/* 整块可点，用底色变化提示可点击范围（与 biji.io 一致）。 */
+.suibi-stream-item:hover { background: var(--suibi-hover); }
+/* 分隔线只出现在条目之间，且与正文列对齐（不留结尾线）。 */
+.suibi-stream-item + .suibi-stream-item::before { inset-inline: 12px; }
 .suibi-live-refresh {
   position: sticky;
   z-index: 10;
