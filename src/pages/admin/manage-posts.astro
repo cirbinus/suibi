@@ -8,6 +8,7 @@ import { formatDate, buildPermalink } from '@/lib/content';
 import { applyFilterSafely } from '@/lib/plugin';
 import { loadQueryCache } from '@/lib/query-cache';
 import { sqlInChunks } from '@/lib/d1-in';
+import { adminPostDisplayTitle } from '@/lib/admin-post-title';
 
 const ctx = await createContext(Astro.locals, Astro.request);
 // Posts management exposes other authors' content — contributor and
@@ -70,6 +71,7 @@ const listWhere = categoryCondition ? and(where, categoryCondition) : where;
 const postColumns = {
   cid: schema.contents.cid,
   title: schema.contents.title,
+  text: schema.contents.text,
   slug: schema.contents.slug,
   type: schema.contents.type,
   status: schema.contents.status,
@@ -121,7 +123,7 @@ const postListData = keywords
   : await loadQueryCache(ctx, {
     domain: 'admin-content',
     scope: 'viewer',
-    key: { view: 'posts', page, status, category: categoryFilter },
+    key: { view: 'posts', page, status, category: categoryFilter, displayTitle: 'body-v1' },
   }, loadPostList);
 const { countResult, posts, allCategories, draftCount, waitingCount, authors, catData } = postListData;
 const totalPosts = countResult[0]?.count || 0;
@@ -225,6 +227,7 @@ const titleActionHtml = new Map<number, string>(
                 const author = authorMap.get(post.authorId || 0);
                 const cats = postCats.get(post.cid) || [];
                 const isDraft = post.type === 'post_draft';
+                const displayTitle = adminPostDisplayTitle(post.title, post.text);
                 return (
                   <tr>
                     <td class="kit-hidden-mb"><input type="checkbox" value={String(post.cid)} name="cid[]" /></td>
@@ -234,16 +237,16 @@ const titleActionHtml = new Map<number, string>(
                         title={`${post.commentsNum || 0} 评论`}>{post.commentsNum || 0}</a>
                     </td>
                     <td>
-                      <a href={`/admin/write-post?cid=${post.cid}`}>{post.title || '无标题'}</a>
+                      <a href={`/admin/write-post?cid=${post.cid}`}>{displayTitle}</a>
                       {isDraft && <em class="status">草稿</em>}
                       {post.status === 'hidden' && <em class="status">隐藏</em>}
                       {post.status === 'waiting' && <em class="status">待审核</em>}
                       {post.status === 'private' && <em class="status">私密</em>}
                       {!!post.hasPassword && post.status === 'publish' && <em class="status">密码保护</em>}
-                      <a href={`/admin/write-post?cid=${post.cid}`} title={`编辑 ${post.title}`}><i class="i-edit"></i></a>
+                      <a href={`/admin/write-post?cid=${post.cid}`} title={`编辑 ${displayTitle}`}><i class="i-edit"></i></a>
                       {!isDraft && (
                         <a href={buildPermalink({ cid: post.cid, slug: post.slug, type: post.type, created: post.created }, urls.siteUrl, options.permalinkPattern as string | undefined)}
-                          title={`浏览 ${post.title}`}><i class="i-exlink"></i></a>
+                          title={`浏览 ${displayTitle}`}><i class="i-exlink"></i></a>
                       )}
                       {titleActionHtml.get(post.cid) && <Fragment set:html={titleActionHtml.get(post.cid)} />}
                     </td>
