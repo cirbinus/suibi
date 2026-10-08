@@ -12,6 +12,7 @@ import {
   hasPasswordPepper,
 } from '@/lib/auth';
 import { LOGIN_ERROR_FLASH_COOKIE, createFlashRedirectHeaders } from '@/lib/flash';
+import { isTrustedSameOrigin } from '@/lib/trusted-origin';
 import { applyFilter, setActivatedPlugins, parseActivatedPlugins, type HookContext } from '@/lib/plugin';
 import {
   clearLoginFailures,
@@ -58,22 +59,8 @@ function redirectWithLoginError(message: string, request?: Request): Response {
  * page is same-origin only; missing Origin/Referer headers are treated
  * as untrusted to avoid `<form enctype=text/plain>` cross-site logins.
  */
-function isSameOriginRequest(request: Request, siteUrl: string): boolean {
-    if (!siteUrl) return false;
-  const expected = (() => {
-    try { return new URL(siteUrl).origin; } catch { return ''; }
-  })();
-  if (!expected) return false;
-  const headerCheck = (raw: string | null) => {
-    if (!raw) return null;
-    try { return new URL(raw).origin === expected; } catch { return false; }
-  };
-  const origin = headerCheck(request.headers.get('origin'));
-  if (origin !== null) return origin;
-  const referer = headerCheck(request.headers.get('referer'));
-  if (referer !== null) return referer;
-  return false;
-}
+const isSameOriginRequest = (request: Request, siteUrl: string): boolean =>
+  isTrustedSameOrigin(request, siteUrl);
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const core = getRequestCoreContextFromLocals(locals);

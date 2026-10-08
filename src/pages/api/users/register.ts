@@ -7,6 +7,7 @@ import { REGISTER_NOTICE_FLASH_COOKIE, createFlashRedirectHeaders } from '@/lib/
 import { eq } from 'drizzle-orm';
 import { env } from 'cloudflare:workers';
 import { invalidatePublicCache } from '@/lib/cache';
+import { isTrustedSameOrigin } from '@/lib/trusted-origin';
 
 /**
  * Reject cross-origin POSTs. Tightening this beyond the global CSRF
@@ -14,22 +15,8 @@ import { invalidatePublicCache } from '@/lib/cache';
  * never silently provision an account in a victim's browser session via
  * a third-party page.
  */
-function isSameOriginRequest(request: Request, siteUrl: string): boolean {
-  if (!siteUrl) return false;
-  const expected = (() => {
-    try { return new URL(siteUrl).origin; } catch { return ''; }
-  })();
-  if (!expected) return false;
-  const headerCheck = (raw: string | null) => {
-    if (!raw) return null;
-    try { return new URL(raw).origin === expected; } catch { return false; }
-  };
-  const origin = headerCheck(request.headers.get('origin'));
-  if (origin !== null) return origin;
-  const referer = headerCheck(request.headers.get('referer'));
-  if (referer !== null) return referer;
-  return false;
-}
+const isSameOriginRequest = (request: Request, siteUrl: string): boolean =>
+  isTrustedSameOrigin(request, siteUrl);
 
 export const POST: APIRoute = async ({ request }) => {
   const db = getDb(env.DB);

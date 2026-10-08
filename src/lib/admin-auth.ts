@@ -4,6 +4,7 @@ import { getAuthCookies, hasPermission, requireAdminCSRF, validateAuthToken } fr
 import { parseActivatedPlugins, setActivatedPlugins, type HookContext } from '@/lib/plugin';
 import { env } from 'cloudflare:workers';
 import { getRequestCoreContext } from '@/lib/context';
+import { isTrustedSameOrigin } from '@/lib/trusted-origin';
 
 export interface AdminActionContext {
   db: Database;
@@ -35,6 +36,9 @@ interface RequireAdminActionOptions {
  * fall back to permissive — there is no trust anchor to compare against.
  */
 export function isSameOriginRequest(request: Request, siteUrl: string): boolean {
+  if (isTrustedSameOrigin(request, siteUrl)) return true;
+  // Fresh installs have no configured site URL; fall back to the request's own
+  // origin so the very first admin actions still work.
   if (!siteUrl) {
     const source = request.headers.get('origin') || request.headers.get('referer');
     if (!source) return false;
@@ -44,19 +48,6 @@ export function isSameOriginRequest(request: Request, siteUrl: string): boolean 
       return false;
     }
   }
-  let expected = '';
-  try { expected = new URL(siteUrl).origin; } catch { return false; }
-  if (!expected) return false;
-
-  const headerCheck = (raw: string | null): boolean | null => {
-    if (!raw) return null;
-    try { return new URL(raw).origin === expected; } catch { return false; }
-  };
-
-  const origin = headerCheck(request.headers.get('origin'));
-  if (origin !== null) return origin;
-  const referer = headerCheck(request.headers.get('referer'));
-  if (referer !== null) return referer;
   return false;
 }
 
