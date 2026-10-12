@@ -228,9 +228,9 @@ export function adminPageHtml(csrf: string, config: EngineSettings): string {
   background: #fff;
   transition: transform .15s ease;
 }
-#engine-settings-app .engine-toggle input:checked { background: #467B96; }
+#engine-settings-app .engine-toggle input:checked { background: var(--admin-accent); }
 #engine-settings-app .engine-toggle input:checked::before { transform: translateX(1.1em); }
-#engine-settings-app .engine-toggle input:focus-visible { outline: 2px solid #467B96; outline-offset: 3px; }
+#engine-settings-app .engine-toggle input:focus-visible { outline: 2px solid var(--admin-accent); outline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) {
   #engine-settings-app .engine-toggle input::before { transition: none; }
 }
@@ -257,7 +257,7 @@ export function adminPageHtml(csrf: string, config: EngineSettings): string {
 #engine-settings-app #engine-batch-bar-fill {
   height: 100%;
   width: 0;
-  background: #467B96;
+  background: var(--admin-accent);
   transition: width .2s ease;
 }
 #engine-settings-app .engine-batch-log {
@@ -297,9 +297,9 @@ export function adminPageHtml(csrf: string, config: EngineSettings): string {
 #engine-settings-app .engine-scope-card:hover { border-color: #b7cdd8; }
 #engine-settings-app .engine-scope-card.is-active,
 #engine-settings-app .engine-scope-card:has(input:checked) {
-  border-color: #467B96;
+  border-color: var(--admin-accent);
   background: #f3f8fb;
-  box-shadow: inset 0 0 0 1px #467B96;
+  box-shadow: inset 0 0 0 1px var(--admin-accent);
 }
 #engine-settings-app .engine-scope-card input {
   position: absolute;
@@ -325,14 +325,14 @@ export function adminPageHtml(csrf: string, config: EngineSettings): string {
   padding: .12em .5em;
   border-radius: 999px;
   background: #eef3f6;
-  color: #467B96;
+  color: var(--admin-accent);
   font-size: .78em;
   font-weight: 600;
   white-space: nowrap;
 }
 #engine-settings-app .engine-scope-card.is-active .engine-scope-badge,
 #engine-settings-app .engine-scope-card:has(input:checked) .engine-scope-badge {
-  background: #467B96;
+  background: var(--admin-accent);
   color: #fff;
 }
 #engine-settings-app .engine-scope-hint {

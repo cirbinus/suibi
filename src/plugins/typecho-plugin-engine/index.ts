@@ -1287,7 +1287,7 @@ function editorHtml(contentType: ContentType): string {
 .typecho-engine-setting textarea:focus,
 .typecho-engine-setting input[type="text"]:focus,
 .typecho-engine-setting select:focus {
-  border-color: #467b96;
+  border-color: var(--admin-accent);
   outline: none;
 }
 .typecho-engine-checkbox {
@@ -1379,7 +1379,7 @@ function editorHtml(contentType: ContentType): string {
   outline: none;
 }
 .typecho-engine-modal-tab.active {
-  background: #467b96;
+  background: var(--admin-accent);
   color: #fff;
 }
 .typecho-engine-modal-close {
@@ -1416,7 +1416,7 @@ function editorHtml(contentType: ContentType): string {
   word-break: break-word;
 }
 .typecho-engine-modal-write:focus {
-  border-color: #467b96;
+  border-color: var(--admin-accent);
   outline: none;
 }
 .typecho-engine-modal-preview {
@@ -1525,7 +1525,7 @@ function editorHtml(contentType: ContentType): string {
   font: 13px/1.5 inherit;
 }
 .typecho-engine-modal-followup-input:focus {
-  border-color: #467b96;
+  border-color: var(--admin-accent);
   outline: none;
 }
 .typecho-engine-modal-followup-input::placeholder {

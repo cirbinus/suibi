@@ -208,14 +208,14 @@ export function adminPageHtml(csrf: string, config: NotifierConfig, _siteTitle: 
 <style>
 .typecho-option li:not(:first-child){margin-top:1em}
 #notifier-settings-app .typecho-option textarea{display:block}
-#notifier-settings-app .notifier-ph{border:1px solid #E7EAF0;border-radius:4px;background:#FBFBFA;padding:12px 14px;}
+#notifier-settings-app .notifier-ph{border:1px solid var(--admin-border);border-radius:4px;background:#FBFBFA;padding:12px 14px;}
 #notifier-settings-app .notifier-ph-head{font-weight:bold;margin:0 0 10px}
 #notifier-settings-app .notifier-ph-groups{display:grid;grid-template-columns:1fr 2fr;gap:0 20px}
-#notifier-settings-app .notifier-ph-group + .notifier-ph-group{border-left:1px solid #E7EAF0;padding-left:20px}
-#notifier-settings-app .notifier-ph-title{font-size:.92857em;font-weight:bold;color:#315F78;margin:0 0 8px}
+#notifier-settings-app .notifier-ph-group + .notifier-ph-group{border-left:1px solid var(--admin-border);padding-left:20px}
+#notifier-settings-app .notifier-ph-title{font-size:.92857em;font-weight:bold;color:var(--admin-accent-hover);margin:0 0 8px}
 #notifier-settings-app .notifier-ph-row{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin:0 0 8px;font-size:.92857em}
 #notifier-settings-app .notifier-ph-row .notifier-ph-label{min-width:5.5em;color:#888;flex-shrink:0}
-#notifier-settings-app .notifier-ph-row code{background:#F0F0EC;border:1px solid #E7EAF0;border-radius:3px;padding:1px 6px;color:#444;font-size:.92857em}
+#notifier-settings-app .notifier-ph-row code{background:#F0F0EC;border:1px solid var(--admin-border);border-radius:3px;padding:1px 6px;color:#444;font-size:.92857em}
 #notifier-settings-app .notifier-checks{display:flex;flex-wrap:wrap;align-items:center;gap:6px 4px;margin:4px 0 0}
 #notifier-settings-app .notifier-check{display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:normal;cursor:pointer}
 #notifier-settings-app .notifier-sep{color:#bbb;margin:0 4px}
@@ -225,16 +225,16 @@ export function adminPageHtml(csrf: string, config: NotifierConfig, _siteTitle: 
 #notifier-settings-app .notifier-inline{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 #notifier-settings-app .notifier-inline .text{flex:1 1 220px;min-width:0;max-width:360px}
 #notifier-settings-app .notifier-tabs-wrap{margin-top:16px}
-#notifier-settings-app .notifier-tabs{display:flex;gap:20px;border-bottom:1px solid #e7eaf0;margin-bottom:12px}
-#notifier-settings-app .notifier-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;color:#64748b;padding:10px 0;cursor:pointer;font:inherit}
-#notifier-settings-app .notifier-tabs button:hover{color:#315f78}
-#notifier-settings-app .notifier-tabs button.current{color:#315f78;border-bottom-color:#315f78}
+#notifier-settings-app .notifier-tabs{display:flex;gap:20px;border-bottom:1px solid var(--admin-border);margin-bottom:12px}
+#notifier-settings-app .notifier-tabs button{border:0;border-bottom:2px solid transparent;background:transparent;color:var(--admin-muted);padding:10px 0;cursor:pointer;font:inherit}
+#notifier-settings-app .notifier-tabs button:hover{color:var(--admin-accent-hover)}
+#notifier-settings-app .notifier-tabs button.current{color:var(--admin-accent-hover);border-bottom-color:var(--admin-accent-hover)}
 #notifier-settings-app .notifier-tab-panel[hidden]{display:none}
 #notifier-settings-notice:empty{display:none}
 @media (max-width:600px){
   #notifier-settings-app .notifier-row{grid-template-columns:1fr}
   #notifier-settings-app .notifier-ph-groups{grid-template-columns:1fr}
-  #notifier-settings-app .notifier-ph-group + .notifier-ph-group{border-left:0;padding-left:0;margin-top:12px;border-top:1px solid #E7EAF0;padding-top:12px}
+  #notifier-settings-app .notifier-ph-group + .notifier-ph-group{border-left:0;padding-left:0;margin-top:12px;border-top:1px solid var(--admin-border);padding-top:12px}
 }
 </style>
 <script>
