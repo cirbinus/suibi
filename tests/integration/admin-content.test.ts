@@ -215,12 +215,20 @@ describe('POST /api/admin/content', () => {
     expect(events[0].domains).toEqual(['home', 'archive', 'other', 'post']);
   });
 
-  it('warms home, the permalink and the feed after publishing', async () => {
+  it('warms home, the permalink and the feed sequentially after publishing', async () => {
     captureInvalidations();
-    const fetchSpy = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => new Response('<html>ok</html>', {
-      status: 200,
-      headers: { 'Content-Type': 'text/html' },
-    }));
+    let activeFetches = 0;
+    let maxActiveFetches = 0;
+    const fetchSpy = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) => {
+      activeFetches += 1;
+      maxActiveFetches = Math.max(maxActiveFetches, activeFetches);
+      await Promise.resolve();
+      activeFetches -= 1;
+      return new Response('<html>ok</html>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html' },
+      });
+    });
     vi.stubGlobal('fetch', fetchSpy);
     const admin = await testDb.query.users.findFirst();
     const cookie = await makeAuthCookie(testDb, admin!.uid, TEST_AUTH_CODE, TEST_SECRET);
@@ -245,6 +253,7 @@ describe('POST /api/admin/content', () => {
     expect(warmUrls).toContain('https://example.com/');
     expect(warmUrls).toContain('https://example.com/feed');
     expect(warmUrls.some((url) => /^https:\/\/example\.com\/archives\/\d+\/$/.test(url))).toBe(true);
+    expect(maxActiveFetches).toBe(1);
     const init = fetchSpy.mock.calls[0]?.[1];
     expect(init?.headers).toMatchObject({ 'X-Typecho-Cache-Warmup': '1', 'Cache-Control': 'no-cache' });
     vi.unstubAllGlobals();

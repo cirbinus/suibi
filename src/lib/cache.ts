@@ -170,7 +170,11 @@ export async function invalidatePublicCache(
  * Failures are non-fatal — visitors fall back to render-on-miss.
  */
 export async function warmPublicCacheUrls(urls: string[]): Promise<void> {
-  await Promise.allSettled(urls.map(async (url) => {
+  // Warm sequentially. A local workerd/miniflare runtime can terminate when a
+  // publish request recursively opens several concurrent requests back into
+  // the same isolate. Sequential warming keeps publish-time cache refreshes
+  // best-effort without overwhelming that single local runtime.
+  for (const url of urls) {
     try {
       const response = await fetchWithTimeout(url, {
         method: 'GET',
@@ -192,7 +196,7 @@ export async function warmPublicCacheUrls(urls: string[]): Promise<void> {
     } catch (error) {
       console.error('[cache] Warmup fetch failed:', error);
     }
-  }));
+  }
 }
 
 /**
